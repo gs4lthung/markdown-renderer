@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Renders Markdown files beautifully in your browser with syntax highlighting, TOC, and dark mode.",
 
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>", "file:///*"],
 
   "content_scripts": [

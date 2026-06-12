@@ -455,20 +455,399 @@
     return nav;
   }
 
-  // ── Page Renderer ────────────────────────────────────────────────────────────
+  // ── State ────────────────────────────────────────────────────────────────────
 
   let rawContent = '';
+  let currentMode = 'view'; // 'view' | 'edit' | 'split'
   let isRawMode = false;
+  let previewTimer = null;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function getDocTitle(src) {
     const m = src.match(/^#\s+(.+)/m);
     return m ? m[1].replace(/[*_`]/g, '') : getFilename();
   }
 
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'auto') root.removeAttribute('data-theme');
+    else root.dataset.theme = theme;
+  }
+
+  function attachCopyButtons(container) {
+    container.querySelectorAll('.cb-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.closest('.cb-wrap').querySelector('code').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        }).catch(() => {});
+      });
+    });
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('md-toast');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add('visible');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('visible'), 2200);
+  }
+
+  // ── Live Preview ─────────────────────────────────────────────────────────────
+
+  function schedulePreviewUpdate() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(flushPreview, 220);
+  }
+
+  function flushPreview() {
+    const ta = document.getElementById('md-editor');
+    const preview = document.getElementById('md-content');
+    if (!ta || !preview) return;
+    rawContent = ta.value;
+    preview.innerHTML = parseMarkdown(rawContent);
+    attachCopyButtons(preview);
+  }
+
+  // ── Word Count ───────────────────────────────────────────────────────────────
+
+  function updateWordCount() {
+    const ta = document.getElementById('md-editor');
+    const wc = document.getElementById('md-wc');
+    if (!ta || !wc) return;
+    const plain = ta.value.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '');
+    const words = plain.trim() ? plain.trim().split(/\s+/).length : 0;
+    wc.textContent = `${words.toLocaleString()} words · ${ta.value.length.toLocaleString()} chars`;
+  }
+
+  // ── Save / Download ──────────────────────────────────────────────────────────
+
+  async function saveFile() {
+    const ta = document.getElementById('md-editor');
+    const content = ta ? ta.value : rawContent;
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: getFilename(),
+          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        showToast('File saved');
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    downloadFile(content);
+  }
+
+  function downloadFile(content) {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: getFilename() }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    showToast('Downloaded');
+  }
+
+  // ── Format Apply ─────────────────────────────────────────────────────────────
+
+  function applyFormat(type) {
+    const ta = document.getElementById('md-editor');
+    if (!ta) return;
+
+    const ss = ta.selectionStart;
+    const se = ta.selectionEnd;
+    const val = ta.value;
+    const sel = val.slice(ss, se);
+    const lineStart = val.lastIndexOf('\n', ss - 1) + 1;
+    const lineEndRaw = val.indexOf('\n', se);
+    const lineEnd = lineEndRaw === -1 ? val.length : lineEndRaw;
+    const currentLine = val.slice(lineStart, lineEnd);
+
+    let newVal, newSS, newSE;
+
+    const wrap = (before, placeholder, after = before) => {
+      const text = sel || placeholder;
+      newVal = val.slice(0, ss) + before + text + after + val.slice(se);
+      newSS = ss + before.length;
+      newSE = newSS + text.length;
+    };
+
+    const wrapLines = (prefix, placeholder) => {
+      const lines = (sel || placeholder).split('\n');
+      const ins = lines.map((l, i) =>
+        typeof prefix === 'function' ? prefix(l, i) : prefix + l
+      ).join('\n');
+      newVal = val.slice(0, ss) + ins + val.slice(se);
+      newSS = ss; newSE = ss + ins.length;
+    };
+
+    switch (type) {
+      case 'bold':   wrap('**', 'bold text');   break;
+      case 'italic': wrap('*',  'italic text'); break;
+      case 'strike': wrap('~~', 'text');        break;
+      case 'code':   wrap('`',  'code');        break;
+
+      case 'link': {
+        const label = sel || 'link text';
+        const ins = `[${label}](url)`;
+        newVal = val.slice(0, ss) + ins + val.slice(se);
+        newSS = ss + label.length + 3; newSE = newSS + 3; // select "url"
+        break;
+      }
+      case 'image': {
+        const alt = sel || 'alt text';
+        const ins = `![${alt}](url)`;
+        newVal = val.slice(0, ss) + ins + val.slice(se);
+        newSS = ss + alt.length + 4; newSE = newSS + 3;
+        break;
+      }
+
+      case 'h1': case 'h2': case 'h3': case 'h4': {
+        const lvl = { h1: '#', h2: '##', h3: '###', h4: '####' }[type];
+        const stripped = currentLine.replace(/^#{1,6}\s/, '');
+        const existing = currentLine.match(/^(#{1,6})\s/);
+        const newLine = (existing && existing[1] === lvl) ? stripped : `${lvl} ${stripped}`;
+        newVal = val.slice(0, lineStart) + newLine + val.slice(lineEnd);
+        newSS = lineStart + newLine.length; newSE = newSS;
+        break;
+      }
+
+      case 'ul':    wrapLines('- ',    'List item');  break;
+      case 'ol':    wrapLines((l, i) => `${i + 1}. ${l}`, 'List item'); break;
+      case 'task':  wrapLines('- [ ] ', 'Task item'); break;
+      case 'quote': wrapLines('> ',    'Quoted text'); break;
+
+      case 'codeblock': {
+        const code = sel || 'code here';
+        const ins = `\`\`\`\n${code}\n\`\`\``;
+        newVal = val.slice(0, ss) + ins + val.slice(se);
+        newSS = ss + 4; newSE = newSS + code.length;
+        break;
+      }
+      case 'hr': {
+        const prefix = ss > 0 && val[ss - 1] !== '\n' ? '\n' : '';
+        const ins = `${prefix}\n---\n\n`;
+        newVal = val.slice(0, ss) + ins + val.slice(se);
+        newSS = newSE = ss + ins.length;
+        break;
+      }
+      case 'table': {
+        const ins = '\n| Header 1 | Header 2 | Header 3 |\n| :--- | :--- | :--- |\n| Cell | Cell | Cell |\n';
+        newVal = val.slice(0, ss) + ins + val.slice(se);
+        newSS = newSE = ss + ins.length;
+        break;
+      }
+      default: return;
+    }
+
+    ta.value = newVal;
+    ta.selectionStart = newSS;
+    ta.selectionEnd = newSE;
+    ta.focus();
+    schedulePreviewUpdate();
+    updateWordCount();
+  }
+
+  // ── Editor Keyboard Handler ───────────────────────────────────────────────────
+
+  function handleEditorKeydown(e) {
+    const ta = e.currentTarget;
+
+    // Ctrl / Cmd shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      const map = { b: 'bold', i: 'italic', k: 'link', e: 'code' };
+      if (map[e.key.toLowerCase()]) { e.preventDefault(); applyFormat(map[e.key.toLowerCase()]); return; }
+      if (e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
+    }
+
+    // Tab → indent / unindent
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const ss = ta.selectionStart;
+      const se = ta.selectionEnd;
+      const val = ta.value;
+      if (e.shiftKey) {
+        const ls = val.lastIndexOf('\n', ss - 1) + 1;
+        if (val.slice(ls, ls + 2) === '  ') {
+          ta.value = val.slice(0, ls) + val.slice(ls + 2);
+          ta.selectionStart = Math.max(ls, ss - 2);
+          ta.selectionEnd   = Math.max(ls, se - 2);
+        }
+      } else {
+        ta.value = val.slice(0, ss) + '  ' + val.slice(se);
+        ta.selectionStart = ta.selectionEnd = ss + 2;
+      }
+      schedulePreviewUpdate();
+      return;
+    }
+
+    // Enter → continue list items automatically
+    if (e.key === 'Enter') {
+      const ss = ta.selectionStart;
+      const val = ta.value;
+      const ls = val.lastIndexOf('\n', ss - 1) + 1;
+      const line = val.slice(ls, ss);
+
+      const ul = line.match(/^(\s*)([-*+])\s(?:\[[ xX]\]\s)?(.*)$/);
+      if (ul) {
+        e.preventDefault();
+        if (!ul[3].trim()) {
+          // Empty item → exit list
+          ta.value = val.slice(0, ls) + '\n' + val.slice(ss);
+          ta.selectionStart = ta.selectionEnd = ls + 1;
+        } else {
+          const prefix = `${ul[1]}${ul[2]} `;
+          ta.value = val.slice(0, ss) + '\n' + prefix + val.slice(ss);
+          ta.selectionStart = ta.selectionEnd = ss + 1 + prefix.length;
+        }
+        schedulePreviewUpdate(); return;
+      }
+
+      const ol = line.match(/^(\s*)(\d+)\.\s(.*)$/);
+      if (ol) {
+        e.preventDefault();
+        if (!ol[3].trim()) {
+          ta.value = val.slice(0, ls) + '\n' + val.slice(ss);
+          ta.selectionStart = ta.selectionEnd = ls + 1;
+        } else {
+          const prefix = `${ol[1]}${+ol[2] + 1}. `;
+          ta.value = val.slice(0, ss) + '\n' + prefix + val.slice(ss);
+          ta.selectionStart = ta.selectionEnd = ss + 1 + prefix.length;
+        }
+        schedulePreviewUpdate(); return;
+      }
+    }
+  }
+
+  // ── Scroll Sync (split mode) ──────────────────────────────────────────────────
+
+  function setupScrollSync() {
+    const editor  = document.getElementById('md-editor');
+    const preview = document.getElementById('md-content');
+    if (!editor || !preview) return;
+    let lock = false;
+    editor.addEventListener('scroll', () => {
+      if (lock) return; lock = true;
+      const r = editor.scrollTop / Math.max(1, editor.scrollHeight - editor.clientHeight);
+      preview.scrollTop = r * (preview.scrollHeight - preview.clientHeight);
+      requestAnimationFrame(() => { lock = false; });
+    });
+    preview.addEventListener('scroll', () => {
+      if (lock) return; lock = true;
+      const r = preview.scrollTop / Math.max(1, preview.scrollHeight - preview.clientHeight);
+      editor.scrollTop = r * (editor.scrollHeight - editor.clientHeight);
+      requestAnimationFrame(() => { lock = false; });
+    });
+  }
+
+  // ── Mode Management ───────────────────────────────────────────────────────────
+
+  function setMode(mode) {
+    currentMode = mode;
+    const layout   = document.getElementById('md-layout');
+    const tocWrap  = document.getElementById('md-toc-wrap');
+    const btnToc   = document.getElementById('btn-toc');
+    const btnRaw   = document.getElementById('btn-raw');
+    const editor   = document.getElementById('md-editor');
+
+    if (!layout) return;
+
+    // Update mode button states
+    document.querySelectorAll('.mode-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode)
+    );
+
+    // Exit raw view when switching mode
+    if (isRawMode) {
+      isRawMode = false;
+      document.getElementById('md-content').hidden = false;
+      document.getElementById('md-raw-wrap').hidden = true;
+      if (btnRaw) btnRaw.textContent = 'Raw';
+    }
+
+    layout.dataset.mode = mode;
+
+    // TOC & Raw buttons only make sense in view mode
+    if (btnToc) btnToc.style.display = mode === 'view' ? '' : 'none';
+    if (btnRaw) btnRaw.style.display = mode === 'view' ? '' : 'none';
+
+    if (mode === 'view') {
+      // Restore TOC if it exists
+      if (tocWrap && document.getElementById('md-toc')) tocWrap.hidden = false;
+    }
+
+    if (mode === 'edit' || mode === 'split') {
+      // Seed editor with current rawContent on first use
+      if (editor && !editor.dataset.seeded) {
+        editor.value = rawContent;
+        editor.dataset.seeded = '1';
+        updateWordCount();
+      }
+      if (mode === 'split') {
+        flushPreview();
+        setupScrollSync();
+      }
+      editor && editor.focus();
+    }
+  }
+
+  // ── Format Bar HTML ───────────────────────────────────────────────────────────
+
+  function buildFmtBarHTML() {
+    const btn = (fmt, label, title) =>
+      `<button class="fmt-btn" data-fmt="${fmt}" title="${title}">${label}</button>`;
+    const sep = '<span class="fmt-sep"></span>';
+
+    return `
+      <div class="fmt-group">
+        ${btn('h1','H1','Heading 1')}${btn('h2','H2','Heading 2')}${btn('h3','H3','Heading 3')}
+      </div>${sep}
+      <div class="fmt-group">
+        ${btn('bold',  '<b>B</b>',    'Bold (Ctrl+B)')}
+        ${btn('italic','<i>I</i>',    'Italic (Ctrl+I)')}
+        ${btn('strike','<s>S</s>',    'Strikethrough')}
+      </div>${sep}
+      <div class="fmt-group">
+        ${btn('link',  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Link', 'Link (Ctrl+K)')}
+        ${btn('image', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Image', 'Image')}
+      </div>${sep}
+      <div class="fmt-group">
+        ${btn('code',      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>', 'Inline code (Ctrl+E)')}
+        ${btn('codeblock', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="8" y1="15" x2="10" y2="15"/><line x1="14" y1="15" x2="16" y2="15"/></svg>', 'Code block')}
+      </div>${sep}
+      <div class="fmt-group">
+        ${btn('ul',   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5" fill="currentColor"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/><circle cx="4" cy="18" r="1.5" fill="currentColor"/></svg>', 'Bullet list')}
+        ${btn('ol',   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>', 'Numbered list')}
+        ${btn('task', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="5" width="6" height="6" rx="1"/><polyline points="5 8 7 10 9 6"/><line x1="13" y1="8" x2="21" y2="8"/><rect x="3" y="13" width="6" height="6" rx="1"/><line x1="13" y1="16" x2="21" y2="16"/></svg>', 'Task list')}
+      </div>${sep}
+      <div class="fmt-group">
+        ${btn('quote', '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1zm12 0c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>', 'Blockquote')}
+        ${btn('hr',    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>', 'Horizontal rule')}
+        ${btn('table', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg>', 'Insert table')}
+      </div>
+      <span class="fmt-spacer"></span>
+      <span id="md-wc" class="wc-label"></span>
+      <button id="btn-save" class="fmt-action" title="Save file (Ctrl+S)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save
+      </button>
+      <button id="btn-dl" class="fmt-action" title="Download as .md">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download
+      </button>`;
+  }
+
+  // ── Page Renderer ─────────────────────────────────────────────────────────────
+
   function render(src) {
     rawContent = src;
     const title = getDocTitle(src);
-    const html = parseMarkdown(src);
+    const html  = parseMarkdown(src);
 
     document.title = title;
     document.head.innerHTML = `
@@ -483,54 +862,86 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <span id="md-fname">${esc(getFilename())}</span>
           </div>
+          <div class="bar-center">
+            <div class="mode-sw">
+              <button class="mode-btn active" data-mode="view">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> View
+              </button>
+              <button class="mode-btn" data-mode="edit">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit
+              </button>
+              <button class="mode-btn" data-mode="split">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg> Split
+              </button>
+            </div>
+          </div>
           <div class="bar-right">
             <button id="btn-toc"   title="Toggle Table of Contents">TOC</button>
             <button id="btn-raw"   title="Toggle raw source view">Raw</button>
             <button id="btn-theme" title="Toggle dark / light mode" aria-label="Toggle theme">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             </button>
             <button id="btn-print" title="Print" aria-label="Print">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </button>
           </div>
         </header>
-        <div id="md-layout">
+
+        <div id="md-layout" data-mode="view">
           <aside id="md-toc-wrap" hidden></aside>
           <main id="md-content" class="md-body">${html}</main>
+
+          <div id="md-editor-pane">
+            <div id="md-fmt-bar">${buildFmtBarHTML()}</div>
+            <textarea id="md-editor" spellcheck="true" placeholder="Start writing Markdown…"></textarea>
+          </div>
+
           <div id="md-raw-wrap" hidden><pre id="md-raw-pre">${esc(src)}</pre></div>
         </div>
-      </div>`;
+      </div>
+      <div id="md-toast"></div>`;
 
-    // TOC
+    // ── TOC ──────────────────────────────────────────────────────────────────
     const tocWrap = document.getElementById('md-toc-wrap');
     const toc = buildTOC(document.getElementById('md-content'));
-    if (toc) {
-      tocWrap.appendChild(toc);
-      tocWrap.hidden = false;
-    }
-
-    // Scrollspy
+    if (toc) { tocWrap.appendChild(toc); tocWrap.hidden = false; }
     setupScrollSpy();
 
-    // Copy buttons
-    document.querySelectorAll('.cb-copy').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const code = btn.closest('.cb-wrap').querySelector('code').textContent;
-        navigator.clipboard.writeText(code).then(() => {
-          btn.textContent = 'Copied!';
-          btn.classList.add('copied');
-          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-        }).catch(() => {});
-      });
+    // ── Copy buttons (initial render) ────────────────────────────────────────
+    attachCopyButtons(document.getElementById('md-content'));
+
+    // ── Mode switcher ────────────────────────────────────────────────────────
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
     });
 
-    // Toolbar buttons
+    // ── Format toolbar ────────────────────────────────────────────────────────
+    document.getElementById('md-fmt-bar').addEventListener('click', e => {
+      const btn = e.target.closest('.fmt-btn');
+      if (btn) applyFormat(btn.dataset.fmt);
+    });
+    document.getElementById('btn-save').addEventListener('click', saveFile);
+    document.getElementById('btn-dl').addEventListener('click', () => {
+      const ta = document.getElementById('md-editor');
+      downloadFile(ta ? ta.value : rawContent);
+    });
+
+    // ── Editor textarea ───────────────────────────────────────────────────────
+    const editorEl = document.getElementById('md-editor');
+    editorEl.addEventListener('keydown', handleEditorKeydown);
+    editorEl.addEventListener('input', () => {
+      schedulePreviewUpdate();
+      updateWordCount();
+    });
+
+    // ── Toolbar: TOC & Raw (view mode only) ───────────────────────────────────
     document.getElementById('btn-toc').addEventListener('click', () => {
-      if (!toc) return;
+      if (!toc || currentMode !== 'view') return;
       tocWrap.hidden = !tocWrap.hidden;
     });
 
     document.getElementById('btn-raw').addEventListener('click', () => {
+      if (currentMode !== 'view') return;
       isRawMode = !isRawMode;
       document.getElementById('md-content').hidden = isRawMode;
       document.getElementById('md-raw-wrap').hidden = !isRawMode;
@@ -545,23 +956,10 @@
 
     document.getElementById('btn-print').addEventListener('click', () => window.print());
 
-    // Load saved theme
+    // ── Load saved theme ──────────────────────────────────────────────────────
     try {
-      chrome.storage.local.get('theme', data => {
-        applyTheme(data.theme || 'auto');
-      });
-    } catch {
-      applyTheme('auto');
-    }
-  }
-
-  function applyTheme(theme) {
-    const root = document.documentElement;
-    if (theme === 'auto') {
-      root.removeAttribute('data-theme');
-    } else {
-      root.dataset.theme = theme;
-    }
+      chrome.storage.local.get('theme', data => applyTheme(data.theme || 'auto'));
+    } catch { applyTheme('auto'); }
   }
 
   // ── Scroll Spy ───────────────────────────────────────────────────────────────
@@ -569,14 +967,11 @@
   function setupScrollSpy() {
     const toc = document.getElementById('md-toc');
     if (!toc) return;
-
     const headings = [...document.querySelectorAll('#md-content h1,#md-content h2,#md-content h3,#md-content h4')];
     if (!headings.length) return;
-
     const obs = new IntersectionObserver(entries => {
       entries.forEach(e => {
-        const id = e.target.id;
-        const link = toc.querySelector(`a[href="#${id}"]`);
+        const link = toc.querySelector(`a[href="#${e.target.id}"]`);
         if (!link) return;
         if (e.isIntersecting) {
           toc.querySelectorAll('a.active').forEach(a => a.classList.remove('active'));
@@ -584,7 +979,6 @@
         }
       });
     }, { rootMargin: '-10% 0px -80% 0px' });
-
     headings.forEach(h => obs.observe(h));
   }
 
@@ -592,11 +986,9 @@
 
   function init() {
     if (!isMarkdownPage()) return;
-
     const pre = document.querySelector('pre');
     const src = pre ? pre.textContent : document.body.innerText;
     if (!src.trim()) return;
-
     render(src);
   }
 
@@ -605,8 +997,5 @@
   } else {
     init();
   }
-
-  // Expose for popup to call toggle
-  window.__mdViewer = { toggleRaw: () => document.getElementById('btn-raw')?.click() };
 
 })();

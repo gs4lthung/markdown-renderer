@@ -1,6 +1,6 @@
-# Markdown Viewer
+# Markdown Viewer & Editor
 
-A cross-browser extension that renders Markdown files beautifully — directly in Chrome, Edge, and Firefox. No external dependencies, no build step.
+A cross-browser extension that renders **and edits** Markdown files beautifully — directly in Chrome, Edge, and Firefox. No external dependencies, no build step.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green.svg)
@@ -9,16 +9,26 @@ A cross-browser extension that renders Markdown files beautifully — directly i
 
 ## Features
 
+### Viewer
+
 - **Automatic rendering** — detects `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn`, `.mdtext` files and renders them instantly
 - **GitHub Flavored Markdown** — tables, task lists, fenced code blocks, setext headers, nested blockquotes, strikethrough, highlights, superscript
 - **Syntax highlighting** — 15+ languages: JavaScript, TypeScript, Python, Java, Go, Rust, C#, PHP, Ruby, Swift, Kotlin, SQL, Bash, CSS, HTML, JSON, YAML
-- **Table of Contents** sidebar with scroll-spy, auto-hidden when fewer than 3 headings
-- **Dark / Light / Auto** theme — follows your OS preference by default, persists across sessions
-- **Raw ↔ Rendered** toggle to view the original source
+- **Table of Contents** sidebar with scroll-spy
+- **Dark / Light / Auto** theme — follows OS preference, persists across sessions
+- **Raw ↔ Rendered** toggle to inspect the original source
 - **Copy** button on every code block
-- **Adjustable font size** from the popup
 - **Print-friendly** layout
-- Zero external dependencies — fully self-contained
+
+### Editor
+
+- **Three modes** — View, Edit, and Side-by-side Split (live preview as you type)
+- **Formatting toolbar** — H1–H3, Bold, Italic, Strikethrough, Link, Image, Inline Code, Code Block, Bullet List, Numbered List, Task List, Blockquote, Horizontal Rule, Table
+- **Keyboard shortcuts** — `Ctrl+B` Bold, `Ctrl+I` Italic, `Ctrl+K` Link, `Ctrl+E` Inline Code, `Ctrl+S` Save
+- **Smart editing** — Tab/Shift+Tab indent, auto-continue list items on Enter
+- **Save** — uses the File System Access API when available; falls back to download
+- **Word count** and character count in the toolbar
+- **Scroll sync** — editor and preview scroll together in Split mode
 
 ---
 

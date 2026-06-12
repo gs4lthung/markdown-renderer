@@ -136,25 +136,26 @@ body {
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────────────── */
-#md-root { display: flex; flex-direction: column; min-height: 100vh; }
+html, body { height: 100%; overflow: hidden; }
+
+#md-root { display: flex; flex-direction: column; height: 100%; }
 
 #md-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 6px 14px;
   background: var(--bar-bg);
   border-bottom: 1px solid var(--bar-border);
   font-size: 14px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  gap: 8px;
 }
 
-.bar-left  { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
-.bar-right { display: flex; align-items: center; gap: 6px; }
+.bar-left  { display: flex; align-items: center; gap: 8px; color: var(--text-muted); min-width: 0; flex: 1; }
+.bar-center { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 #md-fname {
   font-weight: 600;
@@ -187,16 +188,14 @@ body {
 #md-layout {
   display: flex;
   flex: 1;
-  align-items: flex-start;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── TOC Sidebar ────────────────────────────────────────────────────────────── */
 #md-toc-wrap {
   width: 240px;
   flex-shrink: 0;
-  position: sticky;
-  top: 49px;
-  max-height: calc(100vh - 49px);
   overflow-y: auto;
   padding: 20px 16px;
   background: var(--toc-bg);
@@ -237,10 +236,19 @@ body {
 #md-content {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
   padding: 36px 48px;
   max-width: 900px;
   margin: 0 auto;
   width: 100%;
+  scrollbar-width: thin;
+}
+
+/* In split mode, content fills its flex column without max-width centering */
+#md-layout[data-mode="split"] #md-content {
+  max-width: none;
+  margin: 0;
+  padding: 24px 28px;
 }
 
 #md-raw-wrap {
@@ -452,3 +460,192 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── EDITOR ────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Mode Switcher ───────────────────────────────────────────────────────────── */
+.mode-sw {
+  display: flex;
+  border: 1px solid var(--btn-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: none;
+  border-right: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.mode-btn:last-child { border-right: none; }
+.mode-btn:hover { background: var(--btn-hover); color: var(--text); }
+.mode-btn.active { background: var(--link); color: #fff; }
+.mode-btn.active svg { stroke: #fff; }
+
+/* ── Layout mode rules ───────────────────────────────────────────────────────── */
+
+/* Editor pane hidden by default (view mode) */
+#md-editor-pane { display: none; }
+
+/* Edit mode */
+#md-layout[data-mode="edit"] #md-toc-wrap    { display: none; }
+#md-layout[data-mode="edit"] #md-content     { display: none; }
+#md-layout[data-mode="edit"] #md-raw-wrap    { display: none; }
+#md-layout[data-mode="edit"] #md-editor-pane { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+
+/* Split mode */
+#md-layout[data-mode="split"] #md-toc-wrap    { display: none; }
+#md-layout[data-mode="split"] #md-raw-wrap    { display: none; }
+#md-layout[data-mode="split"] #md-editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 2px solid var(--border);
+}
+#md-layout[data-mode="split"] #md-content     { flex: 1; min-width: 0; }
+
+/* ── Format Toolbar ──────────────────────────────────────────────────────────── */
+#md-fmt-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 5px 10px;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--bar-border);
+  flex-shrink: 0;
+}
+
+.fmt-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.fmt-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+
+.fmt-spacer { flex: 1; min-width: 8px; }
+
+.fmt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.fmt-btn:hover { background: var(--btn-hover); border-color: var(--btn-border); }
+.fmt-btn:active { background: var(--bg-code); }
+.fmt-btn b { font-weight: 700; font-size: 13px; }
+.fmt-btn i { font-style: italic; font-size: 13px; }
+.fmt-btn s { font-size: 13px; }
+
+.fmt-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--btn-border);
+  border-radius: 5px;
+  background: var(--btn-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s;
+  white-space: nowrap;
+  margin-left: 2px;
+}
+.fmt-action:hover { background: var(--btn-hover); }
+#btn-save { border-color: var(--link); color: var(--link); }
+#btn-save:hover { background: var(--link); color: #fff; }
+#btn-save:hover svg { stroke: #fff; }
+
+.wc-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+/* ── Editor Textarea ─────────────────────────────────────────────────────────── */
+#md-editor {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  tab-size: 2;
+  caret-color: var(--link);
+  scrollbar-width: thin;
+}
+
+#md-editor::placeholder { color: var(--text-muted); opacity: 0.5; }
+#md-editor:focus { outline: none; }
+
+/* ── Toast Notification ──────────────────────────────────────────────────────── */
+#md-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  padding: 9px 18px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+#md-toast.visible { opacity: 1; transform: translateY(0); }
+
+/* ── Split mode responsive collapse ─────────────────────────────────────────── */
+@media (max-width: 760px) {
+  #md-layout[data-mode="split"] #md-editor-pane { flex: none; width: 100%; border-right: none; border-bottom: 2px solid var(--border); max-height: 45vh; }
+  #md-layout[data-mode="split"] { flex-direction: column; }
+}
+
+/* ── Print: hide editor chrome ───────────────────────────────────────────────── */
+@media print {
+  #md-fmt-bar, #md-editor-pane, .mode-sw { display: none !important; }
+}
