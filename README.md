@@ -24,11 +24,7 @@ A cross-browser extension that renders Markdown files beautifully — directly i
 
 ## Installation
 
-### 1. Generate icons
-
-Open `icons/generate.html` in any browser and click **Download all icons**. Move the three downloaded files (`icon16.png`, `icon48.png`, `icon128.png`) into the `icons/` folder.
-
-### 2. Load the extension
+### 1. Load the extension
 
 **Chrome / Edge**
 1. Go to `chrome://extensions`
@@ -42,7 +38,7 @@ Open `icons/generate.html` in any browser and click **Download all icons**. Move
 3. Click **Load Temporary Add-on**
 4. Select `manifest.json` inside the folder
 
-### 3. Allow local file access (optional)
+### 2. Allow local file access (optional)
 
 To render `.md` files opened from your disk (`file:///...`):
 
@@ -79,10 +75,9 @@ markdown-viewer/
 ├── popup.css           # Popup styles
 ├── test.md             # Feature test file
 └── icons/
-    ├── generate.html   # Icon generator (open in browser)
-    ├── icon16.png      # ← generated
-    ├── icon48.png      # ← generated
-    └── icon128.png     # ← generated
+    ├── icon16.png
+    ├── icon48.png
+    └── icon128.png
 ```
 
 ---
