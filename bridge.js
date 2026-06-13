@@ -1,6 +1,10 @@
 // Runs in the page's main world. Receives render requests from the isolated-world
 // content script via CustomEvents on the shared document, calls mermaid.render(),
 // and dispatches the resulting SVG back.
+document.addEventListener('_mv_reset_theme', function () {
+  window._mvTheme = null;
+});
+
 document.addEventListener('_mv_req', async function (e) {
   const { id, code, theme } = e.detail;
   try {

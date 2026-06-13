@@ -44,7 +44,8 @@
     ts: 'typescript', tsx: 'typescript',
     py: 'python', py3: 'python',
     sh: 'bash', shell: 'bash', zsh: 'bash',
-    rb: 'ruby', yml: 'yaml', md: 'markdown'
+    rb: 'ruby', yml: 'yaml', md: 'markdown',
+    rest: 'http', graphql: 'http'
   };
 
   const KEYWORDS = {
@@ -66,12 +67,13 @@
     json: '',
     xml: '',
     yaml: '',
-    markdown: ''
+    markdown: '',
+    http: ''
   };
 
   function highlight(code, lang) {
     const normalized = LANG_ALIASES[lang] || lang;
-    if (!KEYWORDS[normalized] && normalized !== 'html' && normalized !== 'css' && normalized !== 'json' && normalized !== 'xml') {
+    if (!(normalized in KEYWORDS)) {
       return code;
     }
 
@@ -136,6 +138,17 @@
     // YAML keys
     if (normalized === 'yaml') {
       result = result.replace(/^([ \t]*)([\w-]+)(\s*:)/gm, (_, ind, key, col) => ind + addSpan('key', key) + col);
+    }
+
+    // HTTP blocks
+    if (normalized === 'http') {
+      const METHOD_CLASS = { GET:'get', POST:'post', PUT:'put', DELETE:'delete', PATCH:'patch', HEAD:'head', OPTIONS:'options', TRACE:'options', CONNECT:'options' };
+      result = result.replace(/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|CONNECT)\b/gm,
+        m => addSpan('http-' + METHOD_CLASS[m], m));
+      result = result.replace(/\b(HTTP\/[\d.]+)/g, m => addSpan('kw', m));
+      result = result.replace(/\b([1-5]\d{2})\b/g, m => addSpan('num', m));
+      result = result.replace(/^([\w-]+)(\s*:)/gm, (_, name, colon) => addSpan('key', name) + colon);
+      return result;
     }
 
     // Function calls
@@ -486,12 +499,85 @@
     const rendered = [...document.querySelectorAll('.mermaid-wrap[data-diagram]')];
     if (!rendered.length) return;
     // Tell the bridge to re-initialize mermaid with the new theme on next render.
-    const s = document.createElement('script');
-    s.textContent = 'window._mvTheme=null;';
-    document.head.appendChild(s);
-    s.remove();
+    document.dispatchEvent(new CustomEvent('_mv_reset_theme'));
     for (const block of rendered) await _renderOneDiagram(block);
   }
+
+  // ── Diagram Lightbox ─────────────────────────────────────────────────────────
+
+  (function initDiagramLightbox() {
+    let lightbox = null;
+    let zoom = 1;
+    let svgClone = null;
+
+    function applyZoom() {
+      if (svgClone) svgClone.style.transform = `scale(${zoom})`;
+    }
+
+    function openLightbox(svgEl) {
+      if (lightbox) return;
+      zoom = 1;
+      lightbox = document.createElement('div');
+      lightbox.id = 'md-diagram-lightbox';
+
+      svgClone = svgEl.cloneNode(true);
+      svgClone.removeAttribute('width');
+      svgClone.removeAttribute('height');
+
+      const controls = document.createElement('div');
+      controls.id = 'md-diagram-lightbox-controls';
+
+      const btnOut = document.createElement('button');
+      btnOut.textContent = '−';
+      btnOut.title = 'Zoom out';
+      btnOut.addEventListener('click', e => { e.stopPropagation(); zoom = Math.max(0.25, zoom - 0.25); applyZoom(); });
+
+      const btnReset = document.createElement('button');
+      btnReset.textContent = '1×';
+      btnReset.title = 'Reset zoom';
+      btnReset.addEventListener('click', e => { e.stopPropagation(); zoom = 1; applyZoom(); });
+
+      const btnIn = document.createElement('button');
+      btnIn.textContent = '+';
+      btnIn.title = 'Zoom in';
+      btnIn.addEventListener('click', e => { e.stopPropagation(); zoom = Math.min(4, zoom + 0.25); applyZoom(); });
+
+      controls.append(btnOut, btnReset, btnIn);
+      lightbox.append(controls, svgClone);
+      document.body.appendChild(lightbox);
+      document.addEventListener('keydown', onKey);
+      lightbox.addEventListener('wheel', onWheel, { passive: false });
+    }
+
+    function closeLightbox() {
+      if (!lightbox) return;
+      lightbox.remove();
+      lightbox = null;
+      svgClone = null;
+      document.removeEventListener('keydown', onKey);
+    }
+
+    function onKey(e) { if (e.key === 'Escape') closeLightbox(); }
+
+    function onWheel(e) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      zoom = Math.min(4, Math.max(0.25, zoom + delta));
+      applyZoom();
+    }
+
+    document.addEventListener('click', e => {
+      if (lightbox) {
+        if (e.target.closest('#md-diagram-lightbox-controls')) return;
+        closeLightbox();
+        return;
+      }
+      const wrap = e.target.closest('.mermaid-wrap');
+      if (!wrap) return;
+      const svg = wrap.querySelector('svg');
+      if (svg) openLightbox(svg);
+    });
+  })();
 
   // ── Markdown Entry Point ─────────────────────────────────────────────────────
 
