@@ -24,7 +24,6 @@ Most Markdown viewers either require a paid app, force you through a web service
 - **Mermaid diagram support** — flowcharts, sequence diagrams, Gantt charts, and more render inline automatically
 - **Collapsible TOC sidebar** — always-visible table of contents with scroll-spy; shrinks to an icon strip so it never gets in the way
 - **Dark / Light / Auto theme** — matches your OS preference and remembers your choice
-- **Raw ↔ Rendered** toggle — inspect the original source any time
 - **Copy button** on every code block
 
 ### Editing
@@ -63,8 +62,7 @@ Most Markdown viewers either require a paid app, force you through a web service
 1. Open any `.md` file locally (`File → Open` in Chrome, or drag it into a tab)
 2. The extension renders it automatically — no click needed
 3. Use the **sidebar** to navigate headings; click the panel icon to collapse it
-4. Click **Raw** to see the source; click again to go back
-5. Switch to **Edit** or **Split** mode to make changes, then hit `Ctrl+S` to save
+4. Switch to **Edit** or **Split** mode to make changes, then hit `Ctrl+S` to save
 
 ### Mermaid diagrams
 

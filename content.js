@@ -621,7 +621,6 @@
 
   let rawContent = '';
   let currentMode = 'view'; // 'view' | 'edit' | 'split'
-  let isRawMode = false;
   let previewTimer = null;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -990,7 +989,6 @@
     currentMode = mode;
     const layout   = document.getElementById('md-layout');
     const tocWrap  = document.getElementById('md-toc-wrap');
-    const btnRaw   = document.getElementById('btn-raw');
     const editor   = document.getElementById('md-editor');
 
     if (!layout) return;
@@ -1030,18 +1028,7 @@
       b.classList.toggle('active', b.dataset.mode === mode)
     );
 
-    // Exit raw view when switching mode
-    if (isRawMode) {
-      isRawMode = false;
-      document.getElementById('md-content').hidden = false;
-      document.getElementById('md-raw-wrap').hidden = true;
-      if (btnRaw) btnRaw.textContent = 'Raw';
-    }
-
     layout.dataset.mode = mode;
-
-    // Raw button only makes sense in view mode
-    if (btnRaw) btnRaw.style.display = mode === 'view' ? '' : 'none';
 
     if (mode === 'view') {
       // Apply captured editor position to the now-visible preview
@@ -1157,7 +1144,6 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               Mermaid
             </span>
-            <button id="btn-raw"   title="Toggle raw source view">Raw</button>
             <button id="btn-theme" title="Toggle dark / light mode" aria-label="Toggle theme">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             </button>
@@ -1177,7 +1163,6 @@
             <textarea id="md-editor" spellcheck="true" placeholder="Start writing Markdown…"></textarea>
           </div>
 
-          <div id="md-raw-wrap" hidden><pre id="md-raw-pre">${esc(src)}</pre></div>
         </div>
       </div>
       <div id="md-toast"></div>`;
@@ -1234,13 +1219,6 @@
       btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
     });
 
-    document.getElementById('btn-raw').addEventListener('click', () => {
-      if (currentMode !== 'view') return;
-      isRawMode = !isRawMode;
-      document.getElementById('md-content').hidden = isRawMode;
-      document.getElementById('md-raw-wrap').hidden = !isRawMode;
-      document.getElementById('btn-raw').textContent = isRawMode ? 'Rendered' : 'Raw';
-    });
 
     document.getElementById('btn-theme').addEventListener('click', () => {
       const isDark = document.documentElement.dataset.theme === 'dark';
