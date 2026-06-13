@@ -26,7 +26,6 @@ Most Markdown viewers either require a paid app, force you through a web service
 - **Dark / Light / Auto theme** — matches your OS preference and remembers your choice
 - **Raw ↔ Rendered** toggle — inspect the original source any time
 - **Copy button** on every code block
-- **Print-friendly** output
 
 ### Editing
 
