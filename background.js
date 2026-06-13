@@ -1,5 +1,6 @@
 // Minimal service worker — keeps the extension alive and handles icon badge.
 
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get('theme', data => {
     if (!data.theme) chrome.storage.local.set({ theme: 'auto' });

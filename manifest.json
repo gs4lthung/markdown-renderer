@@ -4,12 +4,12 @@
   "version": "1.0.0",
   "description": "Renders Markdown files beautifully in your browser with syntax highlighting, TOC, and dark mode.",
 
-  "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["<all_urls>", "file:///*"],
+  "permissions": ["storage"],
+  "host_permissions": ["file:///*"],
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>", "file:///*"],
+      "matches": ["file:///*"],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_end",
@@ -40,7 +40,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": ["icons/*", "mermaid.min.js", "bridge.js"],
       "matches": ["<all_urls>"]
     }
   ],

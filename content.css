@@ -42,7 +42,7 @@
   --bg:         #0d1117;
   --bg-alt:     #161b22;
   --bg-code:    #21262d;
-  --border:     #30363d;
+  --border:     #444c56;
   --text:       #e6edf3;
   --text-muted: #7d8590;
   --link:       #58a6ff;
@@ -82,7 +82,7 @@
     --bg:         #0d1117;
     --bg-alt:     #161b22;
     --bg-code:    #21262d;
-    --border:     #30363d;
+    --border:     #444c56;
     --text:       #e6edf3;
     --text-muted: #7d8590;
     --link:       #58a6ff;
@@ -185,6 +185,22 @@ html, body { height: 100%; overflow: hidden; }
 .bar-right button:hover { background: var(--btn-hover); }
 .bar-right button svg { flex-shrink: 0; }
 
+/* Mermaid support badge in navbar */
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  user-select: none;
+}
+.nav-badge svg { stroke: #7c3aed; flex-shrink: 0; }
+
 #md-layout {
   display: flex;
   flex: 1;
@@ -194,33 +210,114 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ── TOC Sidebar ────────────────────────────────────────────────────────────── */
 #md-toc-wrap {
-  width: 240px;
+  position: relative;
+  width: 260px;
   flex-shrink: 0;
-  overflow-y: auto;
-  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
   background: var(--toc-bg);
-  border-right: 1px solid var(--border);
-  scrollbar-width: thin;
+  border-right: 2px solid var(--border);
+  box-shadow: 3px 0 12px rgba(0, 0, 0, 0.07);
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+/* Sidebar toggle button — pinned to top-right corner of sidebar, always visible */
+#btn-toc {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  z-index: 10;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#btn-toc:hover { background: var(--bg-code); color: var(--text); }
+#btn-toc svg { transition: transform 0.2s ease; }
+
+/* Collapsed state — shrink to just the button width */
+#md-toc-wrap.toc-collapsed {
+  width: 44px;
+}
+#md-toc-wrap.toc-collapsed #md-toc { opacity: 0; pointer-events: none; }
+#md-toc-wrap.toc-collapsed #btn-toc svg { transform: scaleX(-1); }
+
+/* Scrollable TOC content area */
+#md-toc {
+  flex: 1;
+  overflow-y: auto;
+  padding: 44px 12px 20px 12px;
+  transition: opacity 0.15s ease;
 }
 
 #md-toc .toc-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
   color: var(--text-muted);
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
 }
 
 #md-toc ul { list-style: none; padding: 0; }
-#md-toc li { margin: 2px 0; }
-#md-toc a {
-  display: block;
-  padding: 3px 6px;
+#md-toc ul ul { padding-left: 10px; }
+#md-toc li { margin: 1px 0; }
+
+/* Collapse: hide children when li lacks .toc-open */
+#md-toc li:not(.toc-open) > ul { display: none; }
+
+/* Row: toggle button + link side by side */
+.toc-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
   border-radius: 4px;
+}
+
+/* Chevron toggle button */
+.toc-toggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.toc-toggle:hover { color: var(--link); background: var(--bg-code); }
+.toc-toggle svg { transition: transform 0.18s ease; }
+.toc-open > .toc-row > .toc-toggle svg { transform: rotate(90deg); }
+
+/* Spacer for leaf items (no toggle) */
+.toc-leaf {
+  flex-shrink: 0;
+  width: 18px;
+}
+
+/* Link */
+#md-toc a {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--text);
   text-decoration: none;
   font-size: 13px;
   line-height: 1.4;
@@ -228,9 +325,15 @@ html, body { height: 100%; overflow: hidden; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-left: 2px solid transparent;
 }
 #md-toc a:hover { color: var(--link); background: var(--bg-code); }
-#md-toc a.active { color: var(--toc-active); font-weight: 600; }
+#md-toc a.active {
+  color: var(--toc-active);
+  font-weight: 600;
+  background: var(--bg-code);
+  border-left-color: var(--toc-active);
+}
 
 /* ── Main Content ───────────────────────────────────────────────────────────── */
 #md-content {
@@ -241,7 +344,7 @@ html, body { height: 100%; overflow: hidden; }
   max-width: 900px;
   margin: 0 auto;
   width: 100%;
-  scrollbar-width: thin;
+
 }
 
 /* In split mode, content fills its flex column without max-width centering */
@@ -334,6 +437,24 @@ html, body { height: 100%; overflow: hidden; }
   margin: 0.5em auto;
 }
 
+.img-broken {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  background: var(--bg-alt);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 /* ── Inline Code ────────────────────────────────────────────────────────────── */
 .md-body .ic,
 .md-body code.ic {
@@ -388,7 +509,7 @@ html, body { height: 100%; overflow: hidden; }
   margin: 0;
   padding: 16px;
   overflow-x: auto;
-  scrollbar-width: thin;
+
 }
 
 .cb-wrap code {
@@ -414,6 +535,50 @@ html, body { height: 100%; overflow: hidden; }
 .sh-key  { color: var(--sh-key);  }
 
 /* ── Tables ─────────────────────────────────────────────────────────────────── */
+.mermaid-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  margin: 1.5em 0;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.diagram-loading::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border: 2px solid var(--border);
+  border-top-color: var(--link);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.mermaid-wrap {
+  margin: 1.5em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.mermaid-wrap svg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.mermaid-error {
+  margin: 1.5em 0;
+  padding: 12px 16px;
+  color: #cf222e;
+  font-size: 13px;
+  background: rgba(207, 34, 46, 0.05);
+  border: 1px solid rgba(207, 34, 46, 0.2);
+  border-radius: 6px;
+}
+
 .tbl-wrap { overflow-x: auto; margin: 1.2em 0; border-radius: 8px; border: 1px solid var(--border); }
 .md-body table { border-collapse: collapse; width: 100%; }
 .md-body th {
@@ -444,7 +609,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  #md-toc-wrap { display: none; }
+  #md-toc-wrap { width: 44px; }
+  #md-toc-wrap #md-toc { opacity: 0; pointer-events: none; }
   #md-content  { padding: 24px 20px; }
 }
 
@@ -456,10 +622,22 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+/* Webkit (Chrome/Edge/Safari) — floating pill thumb via border+clip trick */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--link); background-clip: padding-box; }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /* ── EDITOR ────────────────────────────────────────────────────────────────── */
@@ -613,7 +791,7 @@ html, body { height: 100%; overflow: hidden; }
   line-height: 1.7;
   tab-size: 2;
   caret-color: var(--link);
-  scrollbar-width: thin;
+
 }
 
 #md-editor::placeholder { color: var(--text-muted); opacity: 0.5; }

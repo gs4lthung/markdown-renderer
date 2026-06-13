@@ -264,7 +264,7 @@
 
   // ── Block Parser ─────────────────────────────────────────────────────────────
 
-  function parseBlocks(src) {
+  function parseBlocks(src, idMap = new Map()) {
     src = src.replace(/\r\n|\r/g, '\n');
     const lines = src.split('\n');
     const out = [];
@@ -293,7 +293,10 @@
       if (hm) {
         const lvl = hm[1].length;
         const content = parseInline(hm[2]);
-        const id = slugify(hm[2]);
+        const base = slugify(hm[2]);
+        const n = idMap.get(base) || 0;
+        idMap.set(base, n + 1);
+        const id = n === 0 ? base : `${base}-${n}`;
         out.push(`<h${lvl} id="${id}">${content}</h${lvl}>`);
         i++;
         continue;
@@ -303,11 +306,17 @@
       if (i + 1 < lines.length && trimmed) {
         const nxt = lines[i + 1].trim();
         if (/^=+$/.test(nxt)) {
-          out.push(`<h1 id="${slugify(trimmed)}">${parseInline(trimmed)}</h1>`);
+          const base = slugify(trimmed);
+          const n = idMap.get(base) || 0;
+          idMap.set(base, n + 1);
+          out.push(`<h1 id="${n === 0 ? base : `${base}-${n}`}">${parseInline(trimmed)}</h1>`);
           i += 2; continue;
         }
         if (/^-+$/.test(nxt) && !/^[-*+]\s/.test(trimmed)) {
-          out.push(`<h2 id="${slugify(trimmed)}">${parseInline(trimmed)}</h2>`);
+          const base = slugify(trimmed);
+          const n = idMap.get(base) || 0;
+          idMap.set(base, n + 1);
+          out.push(`<h2 id="${n === 0 ? base : `${base}-${n}`}">${parseInline(trimmed)}</h2>`);
           i += 2; continue;
         }
       }
@@ -326,7 +335,7 @@
           bqLines.push(lines[i].replace(/^\s*>[ \t]?/, ''));
           i++;
         }
-        out.push(`<blockquote>${parseBlocks(bqLines.join('\n'))}</blockquote>`);
+        out.push(`<blockquote>${parseBlocks(bqLines.join('\n'), idMap)}</blockquote>`);
         continue;
       }
 
@@ -380,6 +389,110 @@
     return out.join('\n');
   }
 
+  // ── Mermaid ───────────────────────────────────────────────────────────────────
+  // Mermaid is loaded lazily as a <script> tag (main world) so no eval or
+  // scripting permission is needed. A tiny CustomEvent bridge lets isolated-world
+  // content.js send diagram code to main world and receive rendered SVG back.
+
+  let _mermaidReady     = null; // singleton Promise — only load once per page
+  let _resListenerAdded = false;
+  let _diagramSeq       = 0;
+  const _pending        = new Map(); // id → {resolve, reject}
+
+  function _mermaidTheme() {
+    return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default';
+  }
+
+  function ensureMermaid() {
+    if (_mermaidReady) return _mermaidReady;
+    _mermaidReady = new Promise((resolve, reject) => {
+      // Listen for render results dispatched by the bridge (registered once).
+      if (!_resListenerAdded) {
+        _resListenerAdded = true;
+        document.addEventListener('_mv_res', function (e) {
+          const { id, svg, error } = e.detail;
+          const p = _pending.get(id);
+          if (!p) return;
+          _pending.delete(id);
+          if (error) p.reject(new Error(error));
+          else p.resolve(svg);
+        });
+      }
+
+      // Load both scripts as <script src> — no inline/eval, no scripting permission.
+      // Resolve only after both are ready (bridge must be listening before mermaid loads).
+      let bridgeOk = false, mermaidOk = false;
+      const tryResolve = () => { if (bridgeOk && mermaidOk) resolve(); };
+
+      const bridge = document.createElement('script');
+      bridge.src = chrome.runtime.getURL('bridge.js');
+      bridge.onload  = () => { bridgeOk = true;  tryResolve(); };
+      bridge.onerror = () => { _mermaidReady = null; reject(new Error('Failed to load bridge.js')); };
+      document.head.appendChild(bridge);
+
+      const s = document.createElement('script');
+      s.src = chrome.runtime.getURL('mermaid.min.js');
+      s.onload  = () => { mermaidOk = true;  tryResolve(); };
+      s.onerror = () => { _mermaidReady = null; reject(new Error('Failed to load mermaid.min.js')); };
+      document.head.appendChild(s);
+    });
+    return _mermaidReady;
+  }
+
+  async function _renderOneDiagram(block) {
+    const code = block.dataset.diagram;
+    try {
+      await ensureMermaid();
+      const id = `md-diagram-${++_diagramSeq}`;
+      const svg = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          _pending.delete(id);
+          reject(new Error('Render timeout'));
+        }, 15000);
+        _pending.set(id, {
+          resolve: v => { clearTimeout(timer); resolve(v); },
+          reject:  e => { clearTimeout(timer); reject(e); },
+        });
+        document.dispatchEvent(new CustomEvent('_mv_req', {
+          detail: { id, code, theme: _mermaidTheme() },
+        }));
+      });
+      block.className       = 'mermaid-wrap';
+      block.innerHTML       = svg;
+      block.dataset.diagram = code; // keep for theme re-render
+    } catch (e) {
+      block.className   = 'mermaid-error';
+      block.textContent = 'Diagram error: ' + e.message;
+    }
+  }
+
+  function renderMermaidBlocks(container) {
+    const blocks = [...container.querySelectorAll('.mermaid-pending')];
+    if (!blocks.length) return;
+    // Single observer for all blocks — fires as each enters the viewport.
+    // 300px rootMargin gives enough lead time to finish rendering before scroll.
+    const obs = new IntersectionObserver((entries, observer) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        observer.unobserve(entry.target);
+        _renderOneDiagram(entry.target);
+      });
+    }, { rootMargin: '300px' });
+    blocks.forEach(b => obs.observe(b));
+  }
+
+  // Re-render already-rendered diagrams when the user toggles dark/light mode.
+  async function refreshMermaidTheme() {
+    const rendered = [...document.querySelectorAll('.mermaid-wrap[data-diagram]')];
+    if (!rendered.length) return;
+    // Tell the bridge to re-initialize mermaid with the new theme on next render.
+    const s = document.createElement('script');
+    s.textContent = 'window._mvTheme=null;';
+    document.head.appendChild(s);
+    s.remove();
+    for (const block of rendered) await _renderOneDiagram(block);
+  }
+
   // ── Markdown Entry Point ─────────────────────────────────────────────────────
 
   function parseMarkdown(src) {
@@ -416,6 +529,11 @@
     // 5. Restore code blocks with highlighting
     src = src.replace(/\x00CB(\d+)\x00/g, (_, i) => {
       const { lang, code } = codeBlocks[+i];
+
+      if (lang === 'mermaid') {
+        return `<div class="mermaid-pending" data-diagram="${esc(code)}"><span class="diagram-loading">Loading diagram…</span></div>`;
+      }
+
       const escaped = esc(code);
       const hlit = highlight(escaped, lang);
       const badge = lang ? `<span class="cb-lang">${esc(lang)}</span>` : '';
@@ -437,21 +555,65 @@
     const nav = document.createElement('nav');
     nav.id = 'md-toc';
     nav.innerHTML = '<div class="toc-title">Contents</div>';
-    const ul = document.createElement('ul');
 
+    // Build tree from flat heading list
     const minLevel = Math.min(...hs.map(h => +h.tagName[1]));
+    const root = { level: minLevel - 1, children: [] };
+    const stack = [root];
     hs.forEach(h => {
-      const lvl = +h.tagName[1] - minLevel;
-      const li = document.createElement('li');
-      li.style.paddingLeft = `${lvl * 14}px`;
-      const a = document.createElement('a');
-      a.href = '#' + h.id;
-      a.textContent = h.textContent;
-      li.appendChild(a);
-      ul.appendChild(li);
+      const node = { level: +h.tagName[1], h, children: [] };
+      while (stack.length > 1 && stack[stack.length - 1].level >= node.level) stack.pop();
+      stack[stack.length - 1].children.push(node);
+      stack.push(node);
     });
 
-    nav.appendChild(ul);
+    const CHEVRON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+    function renderList(nodes) {
+      if (!nodes.length) return null;
+      const ul = document.createElement('ul');
+      nodes.forEach(node => {
+        const li = document.createElement('li');
+        const hasChildren = node.children.length > 0;
+        const row = document.createElement('div');
+        row.className = 'toc-row';
+
+        if (hasChildren) {
+          li.classList.add('toc-open');
+          const btn = document.createElement('button');
+          btn.className = 'toc-toggle';
+          btn.setAttribute('aria-label', 'Toggle section');
+          btn.setAttribute('aria-expanded', 'true');
+          btn.innerHTML = CHEVRON;
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const open = li.classList.toggle('toc-open');
+            btn.setAttribute('aria-expanded', String(open));
+          });
+          row.appendChild(btn);
+        } else {
+          const leaf = document.createElement('span');
+          leaf.className = 'toc-leaf';
+          row.appendChild(leaf);
+        }
+
+        const a = document.createElement('a');
+        a.href = '#' + node.h.id;
+        a.textContent = node.h.textContent;
+        row.appendChild(a);
+        li.appendChild(row);
+
+        if (hasChildren) {
+          const childUl = renderList(node.children);
+          if (childUl) li.appendChild(childUl);
+        }
+        ul.appendChild(li);
+      });
+      return ul;
+    }
+
+    const list = renderList(root.children);
+    if (list) nav.appendChild(list);
     return nav;
   }
 
@@ -504,6 +666,20 @@
     previewTimer = setTimeout(flushPreview, 220);
   }
 
+  function attachImageErrorHandlers(container) {
+    container.querySelectorAll('img').forEach(img => {
+      if (img.complete && img.naturalWidth === 0 && img.src) markImageBroken(img);
+      else img.addEventListener('error', () => markImageBroken(img), { once: true });
+    });
+  }
+
+  function markImageBroken(img) {
+    const span = document.createElement('span');
+    span.className = 'img-broken';
+    span.textContent = '⚠ Image not found: ' + (img.alt || img.getAttribute('src') || 'unknown');
+    img.replaceWith(span);
+  }
+
   function flushPreview() {
     const ta = document.getElementById('md-editor');
     const preview = document.getElementById('md-content');
@@ -511,6 +687,8 @@
     rawContent = ta.value;
     preview.innerHTML = parseMarkdown(rawContent);
     attachCopyButtons(preview);
+    renderMermaidBlocks(preview);
+    attachImageErrorHandlers(preview);
   }
 
   // ── Word Count ───────────────────────────────────────────────────────────────
@@ -747,17 +925,105 @@
     });
   }
 
+  // ── Mode Sync Helpers ─────────────────────────────────────────────────────────
+
+  // Returns a stateful function that generates deduplicated heading IDs —
+  // mirrors the counter logic in parseBlocks so editor-text scanning stays in sync.
+  function makeIdCounter() {
+    const map = new Map();
+    return text => {
+      const base = slugify(text);
+      const n = map.get(base) || 0;
+      map.set(base, n + 1);
+      return n === 0 ? base : `${base}-${n}`;
+    };
+  }
+
+  // Returns the ID of the heading currently visible near the top of the preview.
+  function getActiveHeadingId() {
+    const active = document.querySelector('#md-toc a.active');
+    if (active) return active.getAttribute('href').slice(1);
+    const content = document.getElementById('md-content');
+    if (!content) return null;
+    const top = content.getBoundingClientRect().top;
+    for (const h of content.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+      const r = h.getBoundingClientRect();
+      if (r.top >= top && r.top < top + content.clientHeight * 0.6) return h.id;
+    }
+    return null;
+  }
+
+  // Scrolls the editor textarea so that the heading with `id` is near the top.
+  function syncEditorToHeading(id) {
+    const editor = document.getElementById('md-editor');
+    if (!editor || !id) return;
+    const lines = editor.value.split('\n');
+    const nextId = makeIdCounter();
+    for (let i = 0; i < lines.length; i++) {
+      const atx = lines[i].match(/^(#{1,6})\s+(.*?)\s*(?:\s+#+)?\s*$/);
+      if (atx) {
+        if (nextId(atx[2]) === id) {
+          const lh = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+          editor.scrollTop = Math.max(0, i * lh - editor.clientHeight * 0.1);
+          return;
+        }
+        continue;
+      }
+      if (i + 1 < lines.length && lines[i].trim()) {
+        const nxt = lines[i + 1].trim();
+        if (/^=+$/.test(nxt) || (/^-+$/.test(nxt) && !/^[-*+]\s/.test(lines[i]))) {
+          if (nextId(lines[i].trim()) === id) {
+            const lh = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+            editor.scrollTop = Math.max(0, i * lh - editor.clientHeight * 0.1);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+
   // ── Mode Management ───────────────────────────────────────────────────────────
 
   function setMode(mode) {
+    const prevMode = currentMode;
     currentMode = mode;
     const layout   = document.getElementById('md-layout');
     const tocWrap  = document.getElementById('md-toc-wrap');
-    const btnToc   = document.getElementById('btn-toc');
     const btnRaw   = document.getElementById('btn-raw');
     const editor   = document.getElementById('md-editor');
 
     if (!layout) return;
+
+    // ── Capture scroll anchors BEFORE layout change (elements still visible) ──
+    // View → Edit/Split: remember which heading is on screen in the preview
+    const viewHeadingId = (mode !== 'view' && prevMode === 'view')
+      ? getActiveHeadingId() : null;
+
+    // Edit/Split → View: read editor position while editor is still displayed
+    let editHeadingId = null;
+    let editScrollRatio = null;
+    if (mode === 'view' && (prevMode === 'edit' || prevMode === 'split')) {
+      if (editor) {
+        const lh = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+        const topLine = Math.floor(editor.scrollTop / lh);
+        const lines = editor.value.split('\n');
+        const nextId = makeIdCounter();
+        // Scan forward so the dedup counter matches parseBlocks order.
+        // Record every heading at or above topLine+1; last one found is nearest.
+        for (let i = 0; i <= Math.min(topLine + 1, lines.length - 1); i++) {
+          const atx = lines[i].match(/^(#{1,6})\s+(.*?)\s*(?:\s+#+)?\s*$/);
+          if (atx) { editHeadingId = nextId(atx[2]); continue; }
+          if (i + 1 < lines.length && lines[i].trim()) {
+            const nxt = lines[i + 1].trim();
+            if (/^=+$/.test(nxt) || (/^-+$/.test(nxt) && !/^[-*+]\s/.test(lines[i]))) {
+              editHeadingId = nextId(lines[i].trim());
+            }
+          }
+        }
+        editScrollRatio = editor.scrollTop / Math.max(1, editor.scrollHeight - editor.clientHeight);
+      }
+    }
 
     // Update mode button states
     document.querySelectorAll('.mode-btn').forEach(b =>
@@ -774,13 +1040,22 @@
 
     layout.dataset.mode = mode;
 
-    // TOC & Raw buttons only make sense in view mode
-    if (btnToc) btnToc.style.display = mode === 'view' ? '' : 'none';
+    // Raw button only makes sense in view mode
     if (btnRaw) btnRaw.style.display = mode === 'view' ? '' : 'none';
 
     if (mode === 'view') {
-      // Restore TOC if it exists
-      if (tocWrap && document.getElementById('md-toc')) tocWrap.hidden = false;
+      // Apply captured editor position to the now-visible preview
+      if (prevMode === 'edit' || prevMode === 'split') {
+        requestAnimationFrame(() => {
+          const content = document.getElementById('md-content');
+          if (!content) return;
+          if (editHeadingId) {
+            const el = content.querySelector('#' + CSS.escape(editHeadingId));
+            if (el) { el.scrollIntoView({ block: 'start', behavior: 'instant' }); return; }
+          }
+          content.scrollTop = editScrollRatio * (content.scrollHeight - content.clientHeight);
+        });
+      }
     }
 
     if (mode === 'edit' || mode === 'split') {
@@ -795,6 +1070,8 @@
         setupScrollSync();
       }
       editor && editor.focus();
+      // Scroll editor to the section that was visible in the preview
+      if (viewHeadingId) requestAnimationFrame(() => syncEditorToHeading(viewHeadingId));
     }
   }
 
@@ -876,7 +1153,10 @@
             </div>
           </div>
           <div class="bar-right">
-            <button id="btn-toc"   title="Toggle Table of Contents">TOC</button>
+            <span class="nav-badge" title="Mermaid diagram support enabled">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              Mermaid
+            </span>
             <button id="btn-raw"   title="Toggle raw source view">Raw</button>
             <button id="btn-theme" title="Toggle dark / light mode" aria-label="Toggle theme">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -888,7 +1168,11 @@
         </header>
 
         <div id="md-layout" data-mode="view">
-          <aside id="md-toc-wrap" hidden></aside>
+          <aside id="md-toc-wrap" hidden>
+            <button id="btn-toc" title="Collapse sidebar" aria-label="Toggle sidebar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+            </button>
+          </aside>
           <main id="md-content" class="md-body">${html}</main>
 
           <div id="md-editor-pane">
@@ -904,11 +1188,23 @@
     // ── TOC ──────────────────────────────────────────────────────────────────
     const tocWrap = document.getElementById('md-toc-wrap');
     const toc = buildTOC(document.getElementById('md-content'));
-    if (toc) { tocWrap.appendChild(toc); tocWrap.hidden = false; }
+    if (toc) { tocWrap.appendChild(toc); tocWrap.removeAttribute('hidden'); }
     setupScrollSpy();
 
-    // ── Copy buttons (initial render) ────────────────────────────────────────
-    attachCopyButtons(document.getElementById('md-content'));
+    // ── Restore scroll position after reload ──────────────────────────────────
+    const scrollKey = 'md-scroll:' + location.pathname + location.search;
+    const content = document.getElementById('md-content');
+    const saved = sessionStorage.getItem(scrollKey);
+    if (saved) content.scrollTop = parseInt(saved, 10);
+    content.addEventListener('scroll', () => {
+      sessionStorage.setItem(scrollKey, content.scrollTop);
+    }, { passive: true });
+
+    // ── Copy buttons, Mermaid diagrams & image errors (initial render) ───────
+    const mdContent = document.getElementById('md-content');
+    attachCopyButtons(mdContent);
+    renderMermaidBlocks(mdContent);
+    attachImageErrorHandlers(mdContent);
 
     // ── Mode switcher ────────────────────────────────────────────────────────
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -934,10 +1230,11 @@
       updateWordCount();
     });
 
-    // ── Toolbar: TOC & Raw (view mode only) ───────────────────────────────────
+    // ── Sidebar toggle (btn lives inside the sidebar, always visible) ────────
     document.getElementById('btn-toc').addEventListener('click', () => {
-      if (!toc || currentMode !== 'view') return;
-      tocWrap.hidden = !tocWrap.hidden;
+      const collapsed = tocWrap.classList.toggle('toc-collapsed');
+      const btn = document.getElementById('btn-toc');
+      btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
     });
 
     document.getElementById('btn-raw').addEventListener('click', () => {
@@ -952,9 +1249,33 @@
       const isDark = document.documentElement.dataset.theme === 'dark';
       applyTheme(isDark ? 'light' : 'dark');
       try { chrome.storage.local.set({ theme: isDark ? 'light' : 'dark' }); } catch {}
+      refreshMermaidTheme();
     });
 
     document.getElementById('btn-print').addEventListener('click', () => window.print());
+
+    // Intercept hash-link clicks — Chrome blocks file:// → file://# navigation.
+    // Covers both bare "#section" hrefs and same-file relative links like "doc.md#section".
+    document.getElementById('md-root').addEventListener('click', e => {
+      const a = e.target.closest('a[href]');
+      if (!a) return;
+      const attr = a.getAttribute('href') || '';
+      let id = null;
+      if (attr.startsWith('#')) {
+        id = decodeURIComponent(attr.slice(1));
+      } else {
+        try {
+          const resolved = new URL(attr, location.href);
+          if (resolved.pathname === location.pathname && resolved.hash) {
+            id = decodeURIComponent(resolved.hash.slice(1));
+          }
+        } catch {}
+      }
+      if (!id) return;
+      e.preventDefault();
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
 
     // ── Load saved theme ──────────────────────────────────────────────────────
     try {
@@ -976,6 +1297,16 @@
         if (e.isIntersecting) {
           toc.querySelectorAll('a.active').forEach(a => a.classList.remove('active'));
           link.classList.add('active');
+          // auto-expand any collapsed ancestor sections
+          let el = link.parentElement;
+          while (el && el !== toc) {
+            if (el.tagName === 'LI' && !el.classList.contains('toc-open')) {
+              el.classList.add('toc-open');
+              const btn = el.querySelector('.toc-toggle');
+              if (btn) btn.setAttribute('aria-expanded', 'true');
+            }
+            el = el.parentElement;
+          }
         }
       });
     }, { rootMargin: '-10% 0px -80% 0px' });
@@ -989,7 +1320,21 @@
     const pre = document.querySelector('pre');
     const src = pre ? pre.textContent : document.body.innerText;
     if (!src.trim()) return;
+
+    // Capture the initial hash before rendering. We strip it from the URL so
+    // Chrome doesn't attempt a file:// hash navigation (which can error and
+    // abort in-flight requests).
+    const startHash = decodeURIComponent(location.hash.slice(1));
+    if (startHash) history.replaceState(null, '', location.pathname + location.search);
+
     render(src);
+
+    if (startHash) {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(startHash);
+        if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      });
+    }
   }
 
   if (document.readyState === 'loading') {
