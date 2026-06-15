@@ -160,12 +160,204 @@
     return result;
   }
 
+  // ── Emoji Support ─────────────────────────────────────────────────────────────
+
+  const EMOJI_MAP = {
+    // Common GitHub-style emojis
+    smile: '😊', laugh: '😂', cry: '😢', heart: '❤️', thumbsup: '👍', thumbsdown: '👎',
+    rocket: '🚀', star: '⭐', fire: '🔥', poop: '💩', eyes: '👀', ok_hand: '👌',
+    check_mark: '✅', x: '❌', warning: '⚠️', question: '❓', info: 'ℹ️', heavy_check_mark: '✔️',
+    plus: '➕', minus: '➖', heavy_plus_sign: '🔼', heavy_minus_sign: '🔽',
+    100: '💯', coffee: '☕', pizza: '🍕', beer: '🍺', clink: '🥂',
+    cat: '🐱', dog: '🐶', mouse: '🐭', hamster: '🐹', rabbit: '🐰',
+    wolf: '🐺', frog: '🐸', monkey: '🐒', gorilla: '🦍', pig: '🐷',
+    pig2: '🐖', boar: '🐗', bear: '🐻', panda_face: '🐼', koala: '🐨',
+    tiger: '🐯', lion: '🦁', cow: '🐮', ox: '🐂', water_buffalo: '🐃',
+    chicken: '🐔', rooster: '🐓', bird: '🐦', baby_chick: '🐤', hatching_chick: '🐣',
+    penguin: '🐧', snake: '🐍', turtle: '🐢', lizard: '🦎', crocodile: '🐊',
+    whale: '🐳', dolphin: '🐬', fish: '🐟', octopus: '🐙', shell: '🐚',
+    bug: '🐛', ant: '🐜', bee: '🐝', beetle: '🪲',
+    rose: '🌹', wilted_rose: '🥀', hibiscus: '🌺', cherry_blossom: '🌸', sunflower: '🌻',
+    tulip: '🌷', seedling: '🌱', evergreen_tree: '🌲', deciduous_tree: '🌳', palm_tree: '🌴',
+    cactus: '🌵', ear_of_rice: '🌾', herb: '🌿', shamrock: '☘️', four_leaf_clover: '🍀',
+    maple_leaf: '🍁', fallen_leaf: '🍂', leaves: '🍃',
+    sun_with_face: '🌞', full_moon: '🌝', new_moon: '🌚', earth_americas: '🌎', earth_africa: '🌍',
+    earth_asia: '🌏', volcano: '🌋', milky_way: '🌌', moon: '🌙', cloud: '☁️',
+    snowflake: '❄️', snowman: '⛄', zap: '⚡', lightning: '🌩️', rainbow: '🌈',
+    tornado: '🌪️', wave: '🌊', ocean: '🌊', droplet: '💧', sweat_drops: '💦',
+    apple: '🍎', green_apple: '🍏', tangerine: '🍊', lemon: '🍋', banana: '🍌',
+    watermelon: '🍉', grapes: '🍇', melon: '🍈', cherry: '🍒', peach: '🍑',
+    pineapple: '🍍', kiwi: '🥝', avocado: '🥑', tomato: '🍅', eggplant: '🍆',
+    carrot: '🥕', corn: '🌽', hot_pepper: '🌶️', potato: '🥔', sweet_potato: '🍠',
+    bread: '🍞', cheese: '🧀', egg: '🥚', cooking: '🍳', bacon: '🥓',
+    burger: '🍔', fries: '🍟', pizza: '🍕', hot_dog: '🌭', taco: '🌮',
+    sandwich: '🥪', stuffed_flatbread: '🥙', salad: '🥗', shallow_pan_of_food: '🥘',
+    ramen: '🍜', spaghetti: '🍝', meat_on_bone: '🍖', chicken_leg: '🍗', cut_of_meat: '🥩',
+    house: '🏠', house_with_garden: '🏡', office: '🏢', post_office: '🏣', hospital: '🏥',
+    bank: '🏦', hotel: '🏨', love_hotel: '🏩', convenience_store: '🏪', school: '🏫',
+    department_store: '🏬', supermarket: '🏭', convenience_store: '🏪', factory: '🏭',
+    japanese_castle: '🏯', european_castle: '🏰', wedding: '💒', tokyo_tower: '🗼',
+    statue_of_liberty: '🗽', map: '🗺️', beach: '🏖️', desert: '🏜️', island: '🏝️',
+    computer: '💻', desktop_computer: '🖥️', phone: '📱', telephone: '☎️', fax: '📠',
+    camera: '📷', video_camera: '📹', television: '📺', radio: '📻', movie_camera: '🎥',
+    book: '📚', books: '📖', notebook: '📓', ledger: '📒', page_facing_up: '📄',
+    scroll: '📜', memo: '📝', pencil: '✏️', pen: '🖊️', crayon: '🖍️',
+    briefcase: '💼', file_folder: '📁', open_file_folder: '📂', card_index: '📇',
+    calendar: '📆', date: '📅', alarm_clock: '⏰', hourglass: '⌛', watch: '⌚',
+    clock: '🕐', stopwatch: '⏱️', timer: '⏲️',
+    musical_note: '🎵', notes: '🎶', headphone: '🎧', guitar: '🎸', saxophone: '🎷',
+    trumpet: '🎺', violin: '🎻', musical_keyboard: '🎹',
+    car: '🚗', taxi: '🚕', bus: '🚌', trolleybus: '🚎', race_car: '🏎️',
+    police_car: '🚓', ambulance: '🚑', fire_engine: '🚒', truck: '🚚', airplane: '✈️',
+    rocket: '🚀', helicopter: '🚁', steam_locomotive: '🚂', train: '🚆', tram: '🚊',
+    bike: '🚲', motorcycle: '🏍️', scooter: '🛵', walking: '🚶', running: '🏃',
+    dancer: '💃', man_dancing: '🕺', levitate: '🕴️', brain: '🧠', heart: '❤️',
+    lungs: '🫁', anatomical_heart: '🫀', bone: '🦴', eye: '👁️', eyes: '👀',
+    ear: '👂', nose: '👃', mouth: '👄', tongue: '👅', tooth: '🦷',
+    handshake: '🤝', wave: '👋', thumbsup: '👍', thumbsdown: '👎', clap: '👏',
+    raised_hands: '🙌', open_hands: '👐', pray: '🙏', writing_hand: '✍️', nail_care: '💅',
+    lipstic: '💄', kiss: '💋', heart_eyes: '😍', sunglasses: '😎', stuck_out_tongue: '😛',
+    zipper_mouth: '🤐', smirk: '😏', unamused: '😒', rolling_eyes: '🙄', flushed: '😳',
+    scream: '😱', frightened: '😨', dizzy: '😵', rage: '😡', pouting: '😡',
+    crying: '😢', sob: '😭', sleepy: '😪', sneezing: '🤧', mask: '😷',
+    robot: '🤖', alien: '👽', ghost: '👻', skull: '💀', pile_of_poo: '💩',
+    clown: '🤡', joy: '😂', rofl: '🤣', wink: '😉', innocent: '😇',
+    smiling_imp: '👿', imp: '👿', japanese_goblin: '👺', japanese_ogre: '👹',
+    snowman: '⛄', father_christmas: '🎅', mrs_claus: '🤶', superhero: '🦸', supervillain: '🦹',
+    wizard: '🧙', witch: '🧙‍♀️', fairy: '🧚', vampire: '🧛', mermaid: '🧜‍♀️',
+    elf: '🧝', genie: '🧞', zombie: '🧟', troll: '🧟',
+    flag: '🏳️', flags: '🏁', checkered_flag: '🏁', triangular_flag_on_post: '🚩',
+    rainbow_flag: '🏳️‍🌈', transgender_flag: '🏳️‍⚧️',
+    key: '🔑', lock: '🔒', unlock: '🔓', lock_with_ink_pen: '🔏', closed_lock: '🔐',
+    bell: '🔔', no_bell: '🔕', bookmark: '🔖', link: '🔗', radio_button: '🔘',
+    back: '🔙', end: '🔚', on: '🔛', soon: '🔜', top: '🔝',
+    gears: '⚙️', wrench: '🔧', hammer: '🔨', pick: '⛏️', hammer_and_wrench: '🛠️',
+    dagger: '🗡️', crossed_swords: '⚔️', shield: '🛡️', nut_and_bolt: '🔩',
+    atom: '⚛️', biohazard: '☣️', radioactive: '☢️', warning: '⚠️',
+    male_sign: '♂️', female_sign: '♀️', staff_of_aesculapius: '⚕️',
+    plus: '➕', minus: '➖', divide: '➗', multiplication: '✖️',
+    infinity: '♾️', equals: '＝', not_equal: '≠', less_than: '＜', greater_than: '＞',
+    degree: '°', ascending: '🔼', descending: '🔽',
+    one: '1️⃣', two: '2️⃣', three: '3️⃣', four: '4️⃣', five: '5️⃣',
+    six: '6️⃣', seven: '7️⃣', eight: '8️⃣', nine: '9️⃣', zero: '0️⃣',
+    first: '1️⃣', second: '2️⃣', third: '3️⃣', fourth: '4️⃣', fifth: '5️⃣',
+    sixth: '6️⃣', seventh: '7️⃣', eighth: '8️⃣', ninth: '9️⃣', tenth: '🔟',
+    a: '🅰️', b: '🅱️', ab: '🆎', o2: '🅾️', sos: '🆘',
+    id: '🆔', clipboard: '📋', pushpin: '📌', round_pushpin: '📍',
+    pencil2: '✏️', black_nib: '✒️', heavy_check_mark: '✔️', heavy_multiplication_x: '✖️',
+    x: '❌', heavy_plus_sign: '➕', heavy_minus_sign: '➖', heavy_division_sign: '➗',
+    asterisk: '*️⃣', hash: '#️⃣', exclamation: '❗', question: '❓', bangbang: '‼️',
+    interrobang: '⁉️', low_brightness: '🔅', high_brightness: '🔆', part_alternation_mark: '〽️'
+  };
+
+  function parseEmojis(text) {
+    return text.replace(/:([a-z0-9_+-]+):/gi, (_, name) => {
+      const emoji = EMOJI_MAP[name.toLowerCase()];
+      return emoji ? emoji : `:${name}:`;
+    });
+  }
+
+  // ── Math Support (KaTeX) ───────────────────────────────────────────────────────
+
+  let katexLoaded = false;
+  let katexPromise = null;
+
+  function loadKaTeX() {
+    if (katexLoaded) return Promise.resolve();
+    if (katexPromise) return katexPromise;
+
+    katexPromise = new Promise((resolve, reject) => {
+      // Timeout after 5 seconds
+      const timeout = setTimeout(() => {
+        reject(new Error('KaTeX loading timeout'));
+      }, 5000);
+
+      try {
+        // Load KaTeX CSS from local file
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        const cssUrl = chrome.runtime.getURL('katex/katex.min.css');
+        console.log('Loading KaTeX CSS from:', cssUrl);
+        cssLink.href = cssUrl;
+        cssLink.onload = () => console.log('KaTeX CSS loaded');
+        cssLink.onerror = () => {
+          console.error('Failed to load KaTeX CSS');
+          reject(new Error('Failed to load KaTeX CSS'));
+        };
+        document.head.appendChild(cssLink);
+
+        // Load KaTeX JS from local file
+        const script = document.createElement('script');
+        const jsUrl = chrome.runtime.getURL('katex/katex.min.js');
+        console.log('Loading KaTeX JS from:', jsUrl);
+        script.src = jsUrl;
+        script.onload = () => {
+          clearTimeout(timeout);
+          katexLoaded = true;
+          console.log('KaTeX JS loaded successfully');
+          resolve();
+        };
+        script.onerror = () => {
+          clearTimeout(timeout);
+          console.error('Failed to load KaTeX JS');
+          reject(new Error('Failed to load KaTeX JS'));
+        };
+        document.head.appendChild(script);
+      } catch (e) {
+        clearTimeout(timeout);
+        console.error('Error loading KaTeX:', e);
+        reject(e);
+      }
+    });
+
+    return katexPromise;
+  }
+
+  function renderMath(tex, displayMode) {
+    try {
+      if (typeof katex !== 'undefined' && katex.renderToString) {
+        return katex.renderToString(tex, {
+          displayMode: displayMode,
+          throwOnError: false,
+          trust: true,
+          strict: false
+        });
+      } else {
+        // KaTeX not loaded yet, show a simple formatted version
+        const className = displayMode ? 'math-block-fallback' : 'math-inline-fallback';
+        return `<span class="${className}">$$${tex}$$</span>`;
+      }
+    } catch (e) {
+      return `<span class="math-error">Math error: ${e.message}</span>`;
+    }
+  }
+
+  function parseMath(text) {
+    // Block math: $$...$$ (needs to be processed first to avoid inline conflicts)
+    text = text.replace(/\$\$([^\$]+)\$\$/g, (_, tex) => {
+      return `<div class="math-block">${renderMath(tex.trim(), true)}</div>`;
+    });
+
+    // Inline math: $...$ (but not $$...$$)
+    text = text.replace(/\$([^\$]+)\$/g, (_, tex) => {
+      return `<span class="math-inline">${renderMath(tex.trim(), false)}</span>`;
+    });
+
+    return text;
+  }
+
   // ── Inline Markdown Parser ───────────────────────────────────────────────────
 
   function parseInline(text) {
+    // Math parsing (before other processing to avoid conflicts)
+    text = parseMath(text);
+
+    // Emoji parsing
+    text = parseEmojis(text);
+
     // Images before links
     text = text.replace(/!\[([^\]]*)\]\(([^)\s"]+)(?:\s+"([^"]*)")?\)/g, (_, alt, src, title) =>
-      `<img src="${src}" alt="${esc(alt)}"${title ? ` title="${esc(title)}"` : ''} loading="lazy">`
+      `<div class="img-wrap"><img src="${src}" alt="${esc(alt)}"${title ? ` title="${esc(title)}"` : ''} loading="lazy"><button class="img-download-btn" title="Download image" data-src="${esc(src)}" data-alt="${esc(alt)}"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>${title ? `<div class="img-caption">${esc(title)}</div>` : ''}</div>`
     );
 
     // Links
@@ -579,6 +771,194 @@
     });
   })();
 
+  // ── Image Lightbox ─────────────────────────────────────────────────────────────
+
+  (function initImageLightbox() {
+    let lightbox = null;
+    let lightboxImg = null;
+    let currentIndex = 0;
+    let images = [];
+    let zoom = 1;
+
+    function updateImage() {
+      if (!lightboxImg || currentIndex >= images.length) return;
+      lightboxImg.src = images[currentIndex].src;
+      lightboxImg.alt = images[currentIndex].alt || '';
+
+      // Update counter
+      const counter = document.getElementById('md-image-lightbox-counter');
+      if (counter) {
+        counter.textContent = `${currentIndex + 1} / ${images.length}`;
+      }
+
+      // Update single image state
+      if (images.length === 1) {
+        lightbox.classList.add('single-image');
+      } else {
+        lightbox.classList.remove('single-image');
+      }
+    }
+
+    function applyZoom() {
+      if (lightboxImg) lightboxImg.style.transform = `scale(${zoom})`;
+    }
+
+    function openLightbox(imgEl, allImages, index) {
+      if (lightbox) return;
+
+      images = allImages;
+      currentIndex = index;
+      zoom = 1;
+
+      lightbox = document.createElement('div');
+      lightbox.id = 'md-image-lightbox';
+
+      lightboxImg = document.createElement('img');
+      lightboxImg.id = 'md-image-lightbox-img';
+      lightboxImg.src = imgEl.src;
+      lightboxImg.alt = imgEl.alt || '';
+
+      const navPrev = document.createElement('button');
+      navPrev.id = 'md-image-lightbox-nav-prev';
+      navPrev.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>';
+      navPrev.title = 'Previous image (Left arrow)';
+      navPrev.setAttribute('aria-label', 'Previous image');
+      navPrev.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); navigateImage(-1); });
+
+      const navNext = document.createElement('button');
+      navNext.id = 'md-image-lightbox-nav-next';
+      navNext.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>';
+      navNext.title = 'Next image (Right arrow)';
+      navNext.setAttribute('aria-label', 'Next image');
+      navNext.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); navigateImage(1); });
+
+      const counter = document.createElement('div');
+      counter.id = 'md-image-lightbox-counter';
+      counter.textContent = `${currentIndex + 1} / ${images.length}`;
+
+      const controls = document.createElement('div');
+      controls.id = 'md-image-lightbox-controls';
+
+      const btnOut = document.createElement('button');
+      btnOut.textContent = '−';
+      btnOut.title = 'Zoom out';
+      btnOut.setAttribute('aria-label', 'Zoom out');
+      btnOut.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.max(0.5, zoom - 0.25); applyZoom(); });
+
+      const btnReset = document.createElement('button');
+      btnReset.textContent = '1×';
+      btnReset.title = 'Reset zoom';
+      btnReset.setAttribute('aria-label', 'Reset zoom');
+      btnReset.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = 1; applyZoom(); });
+
+      const btnIn = document.createElement('button');
+      btnIn.textContent = '+';
+      btnIn.title = 'Zoom in';
+      btnIn.setAttribute('aria-label', 'Zoom in');
+      btnIn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.min(3, zoom + 0.25); applyZoom(); });
+
+      controls.append(btnOut, btnReset, btnIn);
+
+      lightbox.append(navPrev, navNext, lightboxImg, counter, controls);
+      document.body.appendChild(lightbox);
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        lightbox.classList.add('visible');
+      });
+
+      document.addEventListener('keydown', onKey);
+      lightbox.addEventListener('wheel', onWheel, { passive: false });
+    }
+
+    function closeLightbox() {
+      if (!lightbox) return;
+
+      lightbox.classList.remove('visible');
+
+      setTimeout(() => {
+        if (lightbox) {
+          lightbox.remove();
+          lightbox = null;
+          lightboxImg = null;
+          images = [];
+          currentIndex = 0;
+          zoom = 1;
+          document.removeEventListener('keydown', onKey);
+        }
+      }, 200); // Match CSS transition
+    }
+
+    function navigateImage(direction) {
+      currentIndex += direction;
+
+      if (currentIndex < 0) {
+        currentIndex = images.length - 1;
+      } else if (currentIndex >= images.length) {
+        currentIndex = 0;
+      }
+
+      zoom = 1; // Reset zoom when navigating
+      updateImage();
+      applyZoom();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        closeLightbox();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateImage(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateImage(1);
+      }
+    }
+
+    function onWheel(e) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      zoom = Math.min(3, Math.max(0.5, zoom + delta));
+      applyZoom();
+    }
+
+    // Attach click handler using document-level event delegation
+    document.addEventListener('click', e => {
+      const mdContent = document.getElementById('md-content');
+
+      if (lightbox) {
+        // If clicking on controls, don't close
+        if (e.target.closest('#md-image-lightbox-controls') ||
+            e.target.closest('#md-image-lightbox-nav-prev') ||
+            e.target.closest('#md-image-lightbox-nav-next') ||
+            e.target.closest('#md-image-lightbox-img')) {
+          return;
+        }
+        closeLightbox();
+        return;
+      }
+
+      // Only handle clicks within md-content
+      if (!mdContent || !mdContent.contains(e.target)) return;
+
+      const img = e.target.closest('img');
+      if (!img || img.classList.contains('img-broken')) return;
+
+      // Don't trigger lightbox when clicking download button
+      if (e.target.closest('.img-download-btn')) return;
+
+      // Collect all images in the document - be more flexible with selector
+      const allImages = [...document.querySelectorAll('.md-body img:not(.img-broken)')];
+      const index = allImages.indexOf(img);
+
+      if (index !== -1) {
+        e.preventDefault();
+        console.log('Opening lightbox with image', index + 1, 'of', allImages.length);
+        openLightbox(img, allImages, index);
+      }
+    });
+  })();
+
   // ── Markdown Entry Point ─────────────────────────────────────────────────────
 
   function parseMarkdown(src) {
@@ -735,6 +1115,68 @@
     });
   }
 
+  function attachImageDownloadButtons(container) {
+    container.querySelectorAll('.img-download-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const src = btn.dataset.src;
+        const alt = btn.dataset.alt || 'image';
+        const img = btn.closest('.img-wrap').querySelector('img');
+
+        if (!src) return;
+
+        try {
+          // Try to fetch the image
+          const response = await fetch(src);
+          const blob = await response.blob();
+
+          // Create download link
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+
+          // Extract filename from URL or use alt text
+          let filename = alt;
+          try {
+            const urlObj = new URL(src, location.href);
+            const pathname = urlObj.pathname;
+            const match = pathname.match(/\/([^\/]+\.(png|jpg|jpeg|gif|webp|svg|bmp|ico))$/i);
+            if (match) filename = match[1];
+          } catch {}
+
+          // Ensure filename has extension
+          if (!filename.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i)) {
+            filename += '.png';
+          }
+
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Clean up object URL
+          setTimeout(() => URL.revokeObjectURL(url), 100);
+
+          // Show feedback
+          const originalHTML = btn.innerHTML;
+          btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+          btn.classList.add('downloaded');
+          setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('downloaded');
+          }, 2000);
+
+        } catch (error) {
+          console.error('Failed to download image:', error);
+          // Fallback: open in new tab
+          window.open(src, '_blank');
+        }
+      });
+    });
+  }
+
   function showToast(msg) {
     const toast = document.getElementById('md-toast');
     if (!toast) return;
@@ -774,6 +1216,155 @@
     attachCopyButtons(preview);
     renderMermaidBlocks(preview);
     attachImageErrorHandlers(preview);
+    attachImageDownloadButtons(preview);
+  }
+
+  // ── Search Functionality ───────────────────────────────────────────────────────
+
+  let searchState = {
+    query: '',
+    matches: [],
+    currentMatch: -1,
+    highlights: []
+  };
+
+  function clearHighlights() {
+    searchState.highlights.forEach(el => {
+      const parent = el.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+      }
+    });
+    searchState.highlights = [];
+    searchState.matches = [];
+    searchState.currentMatch = -1;
+  }
+
+  function highlightSearchMatches(query, container) {
+    clearHighlights();
+
+    if (!query.trim()) {
+      updateSearchUI();
+      return;
+    }
+
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    const textNodes = [];
+
+    // Find all text nodes in the content
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          if (node.parentElement.closest('code, pre, .no-search, .cb-wrap, .mermaid-wrap')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+      }
+    );
+
+    let node;
+    while (node = walker.nextNode()) {
+      if (regex.test(node.textContent)) {
+        textNodes.push(node);
+      }
+    }
+
+    // Apply highlighting
+    textNodes.forEach(node => {
+      const parent = node.parentNode;
+      const fragment = document.createDocumentFragment();
+      const parts = node.textContent.split(regex);
+
+      parts.forEach(part => {
+        if (regex.test(part)) {
+          const mark = document.createElement('mark');
+          mark.className = 'search-highlight';
+          mark.textContent = part;
+          searchState.matches.push(mark);
+          fragment.appendChild(mark);
+          searchState.highlights.push(mark);
+        } else {
+          fragment.appendChild(document.createTextNode(part));
+        }
+      });
+
+      parent.replaceChild(fragment, node);
+    });
+
+    searchState.query = query;
+    if (searchState.matches.length > 0) {
+      searchState.currentMatch = 0;
+      scrollToMatch(0);
+    }
+    updateSearchUI();
+  }
+
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function scrollToMatch(index) {
+    if (index < 0 || index >= searchState.matches.length) return;
+
+    // Remove previous current match highlight
+    searchState.matches.forEach(m => m.classList.remove('search-highlight-current'));
+
+    // Add current match highlight
+    const current = searchState.matches[index];
+    current.classList.add('search-highlight-current');
+
+    // Scroll into view
+    current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function updateSearchUI() {
+    const count = document.getElementById('search-count');
+    const input = document.getElementById('search-input');
+
+    if (count) {
+      if (searchState.matches.length === 0) {
+        count.textContent = 'No results';
+        count.className = 'search-count search-no-results';
+      } else {
+        count.textContent = `${searchState.currentMatch + 1} of ${searchState.matches.length}`;
+        count.className = 'search-count';
+      }
+    }
+  }
+
+  function nextMatch() {
+    if (searchState.matches.length === 0) return;
+    searchState.currentMatch = (searchState.currentMatch + 1) % searchState.matches.length;
+    scrollToMatch(searchState.currentMatch);
+    updateSearchUI();
+  }
+
+  function prevMatch() {
+    if (searchState.matches.length === 0) return;
+    searchState.currentMatch = (searchState.currentMatch - 1 + searchState.matches.length) % searchState.matches.length;
+    scrollToMatch(searchState.currentMatch);
+    updateSearchUI();
+  }
+
+  function closeSearch() {
+    const searchContainer = document.getElementById('search-container');
+    if (searchContainer) {
+      searchContainer.classList.add('search-hidden');
+    }
+    clearHighlights();
+  }
+
+  function openSearch() {
+    const searchContainer = document.getElementById('search-container');
+    const searchInput = document.getElementById('search-input');
+    if (searchContainer) {
+      searchContainer.classList.remove('search-hidden');
+      searchInput.focus();
+    }
   }
 
   // ── Word Count ───────────────────────────────────────────────────────────────
@@ -1199,6 +1790,11 @@
     const title = getDocTitle(src);
     const html  = parseMarkdown(src);
 
+    // Load KaTeX for math rendering (async, non-blocking)
+    loadKaTeX().catch(() => {
+      console.warn('KaTeX failed to load, math will not render properly');
+    });
+
     document.title = title;
     document.head.innerHTML = `
       <meta charset="UTF-8">
@@ -1230,11 +1826,35 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               Mermaid
             </span>
+            <button id="btn-search" title="Search (Ctrl+F)" aria-label="Search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
             <button id="btn-theme" title="Toggle dark / light mode" aria-label="Toggle theme">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             </button>
           </div>
         </header>
+
+        <div id="search-container" class="search-hidden">
+          <div class="search-bar">
+            <div class="search-input-wrapper">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="search-input" placeholder="Search in document..." autocomplete="off">
+              <button id="search-close" title="Close" aria-label="Close search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="search-nav">
+              <button id="search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span id="search-count" class="search-count">No results</span>
+              <button id="search-next" title="Next match (Enter)" aria-label="Next match">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div id="md-layout" data-mode="view">
           <aside id="md-toc-wrap" hidden>
@@ -1273,6 +1893,7 @@
     attachCopyButtons(mdContent);
     renderMermaidBlocks(mdContent);
     attachImageErrorHandlers(mdContent);
+    attachImageDownloadButtons(mdContent);
 
     // ── Mode switcher ────────────────────────────────────────────────────────
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -1313,6 +1934,54 @@
       refreshMermaidTheme();
     });
 
+    // ── Search functionality ───────────────────────────────────────────────────────
+    const searchInput = document.getElementById('search-input');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const content = document.getElementById('md-content');
+        if (content) {
+          highlightSearchMatches(e.target.value, content);
+        }
+      }, 200);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          prevMatch();
+        } else {
+          nextMatch();
+        }
+      } else if (e.key === 'Escape') {
+        closeSearch();
+      }
+    });
+
+    document.getElementById('search-close').addEventListener('click', closeSearch);
+    document.getElementById('search-next').addEventListener('click', nextMatch);
+    document.getElementById('search-prev').addEventListener('click', prevMatch);
+
+    document.getElementById('btn-search').addEventListener('click', () => {
+      const searchContainer = document.getElementById('search-container');
+      const isHidden = searchContainer.classList.contains('search-hidden');
+      if (isHidden) {
+        openSearch();
+      } else {
+        closeSearch();
+      }
+    });
+
+    // Global keyboard shortcut for search (Ctrl+F / Cmd+F)
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        openSearch();
+      }
+    });
 
     // Intercept hash-link clicks — Chrome blocks file:// → file://# navigation.
     // Covers both bare "#section" hrefs and same-file relative links like "doc.md#section".

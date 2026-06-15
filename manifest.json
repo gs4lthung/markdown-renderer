@@ -40,7 +40,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["icons/*", "mermaid.min.js", "bridge.js"],
+      "resources": ["icons/*", "mermaid.min.js", "bridge.js", "katex/*"],
       "matches": ["<all_urls>"]
     }
   ],
