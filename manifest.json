@@ -10,7 +10,7 @@
   "content_scripts": [
     {
       "matches": ["file:///*"],
-      "js": ["content.js"],
+      "js": ["katex/katex.min.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_end",
       "all_frames": false
@@ -40,7 +40,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["icons/*", "mermaid.min.js", "bridge.js", "katex/*"],
+      "resources": ["icons/*", "mermaid.min.js", "bridge.js", "katex/katex.min.css", "katex/fonts/*"],
       "matches": ["<all_urls>"]
     }
   ],

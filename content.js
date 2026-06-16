@@ -257,89 +257,52 @@
     });
   }
 
-  // ── Math Support (KaTeX) ───────────────────────────────────────────────────────
+  let scrollSpyLock = false, scrollSpyTimer = null;
 
-  let katexLoaded = false;
-  let katexPromise = null;
-
-  function loadKaTeX() {
-    if (katexLoaded) return Promise.resolve();
-    if (katexPromise) return katexPromise;
-
-    katexPromise = new Promise((resolve, reject) => {
-      // Timeout after 5 seconds
-      const timeout = setTimeout(() => {
-        reject(new Error('KaTeX loading timeout'));
-      }, 5000);
-
-      try {
-        // Load KaTeX CSS from local file
-        const cssLink = document.createElement('link');
-        cssLink.rel = 'stylesheet';
-        const cssUrl = chrome.runtime.getURL('katex/katex.min.css');
-        console.log('Loading KaTeX CSS from:', cssUrl);
-        cssLink.href = cssUrl;
-        cssLink.onload = () => console.log('KaTeX CSS loaded');
-        cssLink.onerror = () => {
-          console.error('Failed to load KaTeX CSS');
-          reject(new Error('Failed to load KaTeX CSS'));
-        };
-        document.head.appendChild(cssLink);
-
-        // Load KaTeX JS from local file
-        const script = document.createElement('script');
-        const jsUrl = chrome.runtime.getURL('katex/katex.min.js');
-        console.log('Loading KaTeX JS from:', jsUrl);
-        script.src = jsUrl;
-        script.onload = () => {
-          clearTimeout(timeout);
-          katexLoaded = true;
-          console.log('KaTeX JS loaded successfully');
-          resolve();
-        };
-        script.onerror = () => {
-          clearTimeout(timeout);
-          console.error('Failed to load KaTeX JS');
-          reject(new Error('Failed to load KaTeX JS'));
-        };
-        document.head.appendChild(script);
-      } catch (e) {
-        clearTimeout(timeout);
-        console.error('Error loading KaTeX:', e);
-        reject(e);
-      }
-    });
-
-    return katexPromise;
+  function scrollToHeading(el, behavior) {
+    const c = document.getElementById('md-content');
+    const top = Math.min(
+      Math.max(0, el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 60),
+      c.scrollHeight - c.clientHeight
+    );
+    c.scrollTo({ top, behavior });
+    if (behavior === 'smooth') {
+      scrollSpyLock = true;
+      clearTimeout(scrollSpyTimer);
+      scrollSpyTimer = setTimeout(() => { scrollSpyLock = false; }, 700);
+    }
   }
+
+  // ── Math Support (KaTeX) ───────────────────────────────────────────────────────
+  // katex.min.js is loaded as a content script (manifest.json) before this file,
+  // so katex is available synchronously in the same isolated world.
 
   function renderMath(tex, displayMode) {
     try {
-      if (typeof katex !== 'undefined' && katex.renderToString) {
-        return katex.renderToString(tex, {
-          displayMode: displayMode,
-          throwOnError: false,
-          trust: true,
-          strict: false
-        });
-      } else {
-        // KaTeX not loaded yet, show a simple formatted version
-        const className = displayMode ? 'math-block-fallback' : 'math-inline-fallback';
-        return `<span class="${className}">$$${tex}$$</span>`;
-      }
+      return katex.renderToString(tex, {
+        displayMode: displayMode,
+        throwOnError: false,
+        trust: true,
+        strict: false
+      });
     } catch (e) {
-      return `<span class="math-error">Math error: ${e.message}</span>`;
+      return `<span class="math-error">${tex}</span>`;
     }
   }
 
   function parseMath(text) {
-    // Block math: $$...$$ (needs to be processed first to avoid inline conflicts)
-    text = text.replace(/\$\$([^\$]+)\$\$/g, (_, tex) => {
+    // $$$...$$$ block math (process first — longest delimiter wins)
+    text = text.replace(/\$\$\$([^$]+)\$\$\$/g, (_, tex) => {
       return `<div class="math-block">${renderMath(tex.trim(), true)}</div>`;
     });
 
-    // Inline math: $...$ (but not $$...$$)
-    text = text.replace(/\$([^\$]+)\$/g, (_, tex) => {
+    // $$...$$ block math
+    text = text.replace(/\$\$([^$]+)\$\$/g, (_, tex) => {
+      return `<div class="math-block">${renderMath(tex.trim(), true)}</div>`;
+    });
+
+    // $...$ inline math
+    text = text.replace(/\$([^$\n]+)\$/g, (_, tex) => {
       return `<span class="math-inline">${renderMath(tex.trim(), false)}</span>`;
     });
 
@@ -1027,6 +990,7 @@
     const root = { level: minLevel - 1, children: [] };
     const stack = [root];
     hs.forEach(h => {
+      if (!h.id) return;
       const node = { level: +h.tagName[1], h, children: [] };
       while (stack.length > 1 && stack[stack.length - 1].level >= node.level) stack.pop();
       stack[stack.length - 1].children.push(node);
@@ -1209,14 +1173,14 @@
 
   function flushPreview() {
     const ta = document.getElementById('md-editor');
-    const preview = document.getElementById('md-content');
-    if (!ta || !preview) return;
+    const body = document.querySelector('#md-content .md-body');
+    if (!ta || !body) return;
     rawContent = ta.value;
-    preview.innerHTML = parseMarkdown(rawContent);
-    attachCopyButtons(preview);
-    renderMermaidBlocks(preview);
-    attachImageErrorHandlers(preview);
-    attachImageDownloadButtons(preview);
+    body.innerHTML = parseMarkdown(rawContent);
+    attachCopyButtons(body);
+    renderMermaidBlocks(body);
+    attachImageErrorHandlers(body);
+    attachImageDownloadButtons(body);
   }
 
   // ── Search Functionality ───────────────────────────────────────────────────────
@@ -1715,7 +1679,7 @@
           if (!content) return;
           if (editHeadingId) {
             const el = content.querySelector('#' + CSS.escape(editHeadingId));
-            if (el) { el.scrollIntoView({ block: 'start', behavior: 'instant' }); return; }
+            if (el) { scrollToHeading(el, 'instant'); return; }
           }
           content.scrollTop = editScrollRatio * (content.scrollHeight - content.clientHeight);
         });
@@ -1790,16 +1754,12 @@
     const title = getDocTitle(src);
     const html  = parseMarkdown(src);
 
-    // Load KaTeX for math rendering (async, non-blocking)
-    loadKaTeX().catch(() => {
-      console.warn('KaTeX failed to load, math will not render properly');
-    });
-
     document.title = title;
     document.head.innerHTML = `
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${esc(title)}</title>`;
+      <title>${esc(title)}</title>
+      <link rel="stylesheet" href="${chrome.runtime.getURL('katex/katex.min.css')}">`;
 
     document.body.innerHTML = `
       <div id="md-root">
@@ -1862,7 +1822,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
             </button>
           </aside>
-          <main id="md-content" class="md-body">${html}</main>
+          <main id="md-content"><div class="md-body">${html}</div></main>
 
           <div id="md-editor-pane">
             <div id="md-fmt-bar">${buildFmtBarHTML()}</div>
@@ -2000,10 +1960,20 @@
           }
         } catch {}
       }
-      if (!id) return;
+      if (id === null) return;
       e.preventDefault();
+      if (!id) return;
       const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (el) {
+        scrollToHeading(el, 'smooth');
+        history.replaceState(null, '', '#' + id);
+        const toc = document.getElementById('md-toc');
+        if (toc) {
+          toc.querySelectorAll('a.active').forEach(a => a.classList.remove('active'));
+          const link = toc.querySelector(`a[href="#${CSS.escape(id)}"]`);
+          if (link) link.classList.add('active');
+        }
+      }
     });
 
     // ── Load saved theme ──────────────────────────────────────────────────────
@@ -2020,6 +1990,7 @@
     const headings = [...document.querySelectorAll('#md-content h1,#md-content h2,#md-content h3,#md-content h4')];
     if (!headings.length) return;
     const obs = new IntersectionObserver(entries => {
+      if (scrollSpyLock) return; // click-driven scroll in flight; don't override
       entries.forEach(e => {
         const link = toc.querySelector(`a[href="#${e.target.id}"]`);
         if (!link) return;
@@ -2046,13 +2017,11 @@
 
   function init() {
     if (!isMarkdownPage()) return;
+    history.scrollRestoration = 'manual';
     const pre = document.querySelector('pre');
     const src = pre ? pre.textContent : document.body.innerText;
     if (!src.trim()) return;
 
-    // Capture the initial hash before rendering. We strip it from the URL so
-    // Chrome doesn't attempt a file:// hash navigation (which can error and
-    // abort in-flight requests).
     const startHash = decodeURIComponent(location.hash.slice(1));
     if (startHash) history.replaceState(null, '', location.pathname + location.search);
 
@@ -2061,7 +2030,10 @@
     if (startHash) {
       requestAnimationFrame(() => {
         const el = document.getElementById(startHash);
-        if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+        if (el) {
+          scrollToHeading(el, 'instant');
+          history.replaceState(null, '', '#' + startHash);
+        }
       });
     }
   }
