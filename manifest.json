@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Markdown Viewer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Renders .md files beautifully, with a built-in editor, Mermaid diagrams, LaTeX math, search, dark mode and Word export.",
 
   "permissions": ["storage"],
