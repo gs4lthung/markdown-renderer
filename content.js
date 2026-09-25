@@ -665,13 +665,65 @@
     let zoom = 1;
     let svgClone = null;
 
-    function applyZoom() {
-      if (svgClone) svgClone.style.transform = `scale(${zoom})`;
+    // Drag-to-pan state
+    let panX = 0, panY = 0;
+    let isPanning = false;
+    let panPointerStartX = 0, panPointerStartY = 0;
+    let panDownClientX = 0, panDownClientY = 0;
+    let panMoved = false;
+    let suppressNextClose = false;
+
+    function applyTransform() {
+      if (svgClone) {
+        svgClone.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      }
+    }
+
+    function resetView() {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+      applyTransform();
+    }
+
+    // Pointer-based drag-to-pan (works for mouse, touch and pen)
+    function onPanStart(e) {
+      if (!e.isPrimary || e.button > 0) return;
+      e.preventDefault();
+      isPanning = true;
+      panMoved = false;
+      panDownClientX = e.clientX;
+      panDownClientY = e.clientY;
+      panPointerStartX = e.clientX - panX;
+      panPointerStartY = e.clientY - panY;
+      svgClone.classList.add('panning');
+      try { svgClone.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+
+    function onPanMove(e) {
+      if (!isPanning) return;
+      panX = e.clientX - panPointerStartX;
+      panY = e.clientY - panPointerStartY;
+      if (!panMoved &&
+          Math.hypot(e.clientX - panDownClientX, e.clientY - panDownClientY) > 3) {
+        panMoved = true;
+      }
+      applyTransform();
+    }
+
+    function onPanEnd(e) {
+      if (!isPanning) return;
+      isPanning = false;
+      svgClone.classList.remove('panning');
+      try { svgClone.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (panMoved) suppressNextClose = true;
     }
 
     function openLightbox(svgEl) {
       if (lightbox) return;
       zoom = 1;
+      panX = 0;
+      panY = 0;
       lightbox = document.createElement('div');
       lightbox.id = 'md-diagram-lightbox';
 
@@ -685,21 +737,29 @@
       const btnOut = document.createElement('button');
       btnOut.textContent = '−';
       btnOut.title = 'Zoom out';
-      btnOut.addEventListener('click', e => { e.stopPropagation(); zoom = Math.max(0.25, zoom - 0.25); applyZoom(); });
+      btnOut.addEventListener('click', e => { e.stopPropagation(); zoom = Math.max(0.25, zoom - 0.25); applyTransform(); });
 
       const btnReset = document.createElement('button');
       btnReset.textContent = '1×';
-      btnReset.title = 'Reset zoom';
-      btnReset.addEventListener('click', e => { e.stopPropagation(); zoom = 1; applyZoom(); });
+      btnReset.title = 'Reset view';
+      btnReset.addEventListener('click', e => { e.stopPropagation(); resetView(); });
 
       const btnIn = document.createElement('button');
       btnIn.textContent = '+';
       btnIn.title = 'Zoom in';
-      btnIn.addEventListener('click', e => { e.stopPropagation(); zoom = Math.min(4, zoom + 0.25); applyZoom(); });
+      btnIn.addEventListener('click', e => { e.stopPropagation(); zoom = Math.min(4, zoom + 0.25); applyTransform(); });
 
       controls.append(btnOut, btnReset, btnIn);
       lightbox.append(controls, svgClone);
       document.body.appendChild(lightbox);
+
+      // Drag-to-pan
+      svgClone.addEventListener('pointerdown', onPanStart);
+      svgClone.addEventListener('pointermove', onPanMove);
+      svgClone.addEventListener('pointerup', onPanEnd);
+      svgClone.addEventListener('pointercancel', onPanEnd);
+      svgClone.addEventListener('click', e => { e.stopPropagation(); });
+
       document.addEventListener('keydown', onKey);
       lightbox.addEventListener('wheel', onWheel, { passive: false });
     }
@@ -709,6 +769,10 @@
       lightbox.remove();
       lightbox = null;
       svgClone = null;
+      isPanning = false;
+      zoom = 1;
+      panX = 0;
+      panY = 0;
       document.removeEventListener('keydown', onKey);
     }
 
@@ -718,11 +782,16 @@
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       zoom = Math.min(4, Math.max(0.25, zoom + delta));
-      applyZoom();
+      applyTransform();
     }
 
     document.addEventListener('click', e => {
       if (lightbox) {
+        // A just-finished drag can surface as a click on the backdrop — swallow it
+        if (suppressNextClose) {
+          suppressNextClose = false;
+          return;
+        }
         if (e.target.closest('#md-diagram-lightbox-controls')) return;
         closeLightbox();
         return;
@@ -743,6 +812,14 @@
     let images = [];
     let zoom = 1;
 
+    // Drag-to-pan state
+    let panX = 0, panY = 0;
+    let isPanning = false;
+    let panPointerStartX = 0, panPointerStartY = 0;
+    let panDownClientX = 0, panDownClientY = 0;
+    let panMoved = false;
+    let suppressNextClose = false;
+
     function updateImage() {
       if (!lightboxImg || currentIndex >= images.length) return;
       lightboxImg.src = images[currentIndex].src;
@@ -762,8 +839,52 @@
       }
     }
 
-    function applyZoom() {
-      if (lightboxImg) lightboxImg.style.transform = `scale(${zoom})`;
+    function applyTransform() {
+      if (lightboxImg) {
+        lightboxImg.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      }
+    }
+
+    function resetView() {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+      applyTransform();
+    }
+
+    // Pointer-based drag-to-pan (works for mouse, touch and pen)
+    function onPanStart(e) {
+      if (!e.isPrimary || e.button > 0) return;
+      e.preventDefault();
+      isPanning = true;
+      panMoved = false;
+      panDownClientX = e.clientX;
+      panDownClientY = e.clientY;
+      // Anchor so the point under the cursor stays put while dragging
+      panPointerStartX = e.clientX - panX;
+      panPointerStartY = e.clientY - panY;
+      lightboxImg.classList.add('panning');
+      try { lightboxImg.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+
+    function onPanMove(e) {
+      if (!isPanning) return;
+      panX = e.clientX - panPointerStartX;
+      panY = e.clientY - panPointerStartY;
+      if (!panMoved &&
+          Math.hypot(e.clientX - panDownClientX, e.clientY - panDownClientY) > 3) {
+        panMoved = true;
+      }
+      applyTransform();
+    }
+
+    function onPanEnd(e) {
+      if (!isPanning) return;
+      isPanning = false;
+      lightboxImg.classList.remove('panning');
+      try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
+      // If the drag ended over the backdrop, stop that click from closing the box
+      if (panMoved) suppressNextClose = true;
     }
 
     function openLightbox(imgEl, allImages, index) {
@@ -772,6 +893,8 @@
       images = allImages;
       currentIndex = index;
       zoom = 1;
+      panX = 0;
+      panY = 0;
 
       lightbox = document.createElement('div');
       lightbox.id = 'md-image-lightbox';
@@ -806,24 +929,32 @@
       btnOut.textContent = '−';
       btnOut.title = 'Zoom out';
       btnOut.setAttribute('aria-label', 'Zoom out');
-      btnOut.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.max(0.5, zoom - 0.25); applyZoom(); });
+      btnOut.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.max(0.5, zoom - 0.25); applyTransform(); });
 
       const btnReset = document.createElement('button');
       btnReset.textContent = '1×';
-      btnReset.title = 'Reset zoom';
-      btnReset.setAttribute('aria-label', 'Reset zoom');
-      btnReset.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = 1; applyZoom(); });
+      btnReset.title = 'Reset view';
+      btnReset.setAttribute('aria-label', 'Reset view');
+      btnReset.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); resetView(); });
 
       const btnIn = document.createElement('button');
       btnIn.textContent = '+';
       btnIn.title = 'Zoom in';
       btnIn.setAttribute('aria-label', 'Zoom in');
-      btnIn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.min(3, zoom + 0.25); applyZoom(); });
+      btnIn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); zoom = Math.min(3, zoom + 0.25); applyTransform(); });
 
       controls.append(btnOut, btnReset, btnIn);
 
       lightbox.append(navPrev, navNext, lightboxImg, counter, controls);
       document.body.appendChild(lightbox);
+
+      // Drag-to-pan
+      lightboxImg.addEventListener('pointerdown', onPanStart);
+      lightboxImg.addEventListener('pointermove', onPanMove);
+      lightboxImg.addEventListener('pointerup', onPanEnd);
+      lightboxImg.addEventListener('pointercancel', onPanEnd);
+      // A drag on the image shouldn't be read as a click that closes the box
+      lightboxImg.addEventListener('click', e => { e.stopPropagation(); });
 
       // Trigger animation
       requestAnimationFrame(() => {
@@ -847,6 +978,9 @@
           images = [];
           currentIndex = 0;
           zoom = 1;
+          panX = 0;
+          panY = 0;
+          isPanning = false;
           document.removeEventListener('keydown', onKey);
         }
       }, 200); // Match CSS transition
@@ -861,9 +995,9 @@
         currentIndex = 0;
       }
 
-      zoom = 1; // Reset zoom when navigating
+      // Reset zoom and pan when moving to another image
       updateImage();
-      applyZoom();
+      resetView();
     }
 
     function onKey(e) {
@@ -882,7 +1016,7 @@
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       zoom = Math.min(3, Math.max(0.5, zoom + delta));
-      applyZoom();
+      applyTransform();
     }
 
     // Attach click handler using document-level event delegation
@@ -890,6 +1024,11 @@
       const mdContent = document.getElementById('md-content');
 
       if (lightbox) {
+        // A just-finished drag can surface as a click on the backdrop — swallow it
+        if (suppressNextClose) {
+          suppressNextClose = false;
+          return;
+        }
         // If clicking on controls, don't close
         if (e.target.closest('#md-image-lightbox-controls') ||
             e.target.closest('#md-image-lightbox-nav-prev') ||
@@ -1373,6 +1512,60 @@
     showToast('Downloaded');
   }
 
+  // ── Export to DOCX ────────────────────────────────────────────────────────────
+
+  const EXPORT_MD_EXT = /\.(md|markdown|mdown|mkd|mkdn|mdwn|mdtext)$/i;
+
+  async function doExport() {
+    const btn = document.getElementById('btn-export');
+    if (!btn || btn.classList.contains('exporting')) return;
+    if (!window.MdDocx) { showToast('Export unavailable'); return; }
+    if (currentMode === 'edit' || currentMode === 'split') flushPreview();
+
+    const container = document.querySelector('#md-content .md-body');
+    if (!container) { showToast('Nothing to export'); return; }
+
+    const orig = btn.innerHTML;
+    btn.classList.add('exporting');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span class="btn-label">Exporting…</span>';
+
+    // Diagrams bake in the current theme; force light so exported PNGs match the light doc.
+    const root = document.documentElement;
+    const prevTheme = root.dataset.theme;
+    const forceLight = prevTheme === 'dark' &&
+      !!document.querySelector('.mermaid-pending, .mermaid-wrap[data-diagram]');
+    // Re-render the already-rendered diagrams in light FIRST (while pending ones are still
+    // .mermaid-pending, so they aren't selected here) — then render the pending ones once
+    // below. This avoids double-rendering the pending diagrams.
+    if (forceLight) { root.dataset.theme = 'light'; await refreshMermaidTheme(); }
+    // Mermaid renders lazily (only when scrolled into view), so diagrams below the fold
+    // are still pending at export time. Force-render them (in the now-current theme) so
+    // they export as images — not the "Loading diagram…" placeholder or source fallback.
+    const pendingDiagrams = [...document.querySelectorAll('.mermaid-pending')];
+    if (pendingDiagrams.length) await Promise.all(pendingDiagrams.map(b => _renderOneDiagram(b)));
+
+    try {
+      const base = (getFilename().replace(EXPORT_MD_EXT, '') || 'document');
+      const { skipped } = await window.MdDocx.export({
+        container,
+        filename: base + '.docx',
+        title: document.title || base,
+      });
+      showToast(skipped
+        ? `Exported — ${skipped} item${skipped > 1 ? 's' : ''} couldn't be embedded`
+        : 'Exported ' + base + '.docx');
+    } catch (err) {
+      console.error('DOCX export failed:', err);
+      showToast('Export failed — see console');
+    } finally {
+      if (forceLight) { root.dataset.theme = prevTheme; await refreshMermaidTheme(); }
+      btn.classList.remove('exporting');
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+
   // ── Format Apply ─────────────────────────────────────────────────────────────
 
   function applyFormat(type) {
@@ -1786,6 +1979,25 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               Mermaid
             </span>
+            <button
+              id="btn-export"
+              title="Export to Word (.docx) — Ctrl+Shift+E"
+              aria-label="Export to DOCX"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <path d="M8 13l1.5 4 1.5-3 1.5 3 1.5-4" />
+              </svg>
+              <span class="btn-label">DOCX</span>
+            </button>
             <button id="btn-search" title="Search (Ctrl+F)" aria-label="Search">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
@@ -1869,6 +2081,15 @@
     document.getElementById('btn-dl').addEventListener('click', () => {
       const ta = document.getElementById('md-editor');
       downloadFile(ta ? ta.value : rawContent);
+    });
+
+    // ── Export to DOCX ────────────────────────────────────────────────────────
+    document.getElementById('btn-export').addEventListener('click', doExport);
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        e.preventDefault();
+        doExport();
+      }
     });
 
     // ── Editor textarea ───────────────────────────────────────────────────────

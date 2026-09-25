@@ -131,7 +131,7 @@ LIMIT 20;
 ```json
 {
   "name": "markdown-viewer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Browser extension for rendering Markdown",
   "keywords": ["markdown", "browser", "extension"],
   "engines": { "node": ">=18" },
